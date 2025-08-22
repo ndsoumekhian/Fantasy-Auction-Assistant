@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Fantasy Auction Assistant — Draft Board</title>
+<style>
+  :root { --pad: 10px; --gap: 12px; --radius: 10px; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, system-ui, Segoe UI, Roboto, Arial, sans-serif; margin: 0; color: #111; background: #f7f7f9; }
+  header { padding: 18px var(--pad); background: #111; color: #fff; }
+  header h1 { margin: 0; font-size: 20px; }
+  main { padding: 18px var(--pad); max-width: 1400px; margin: 0 auto; }
+
+  /* 3-column layout: slightly wider right column */
+  .main-grid { display: grid; gap: var(--gap); grid-template-columns: 1.15fr 1.25fr 0.95fr; align-items: start; }
+  .col-1 { grid-column: 1; }
+  .col-2 { grid-column: 2; }
+  .col-3 { grid-column: 3; }
+  .row-1 { grid-row: 1; }
+  .row-2 { grid-row: 2; }
+  .row-3 { grid-row: 3; }
+  .row-4 { grid-row: 4; }
+  .row-5 { grid-row: 5; }
+
+  .stack { display: grid; gap: var(--gap); } /* stack cards to same width */
+
+  .card { background: #fff; border: 1px solid #e6e6ee; border-radius: var(--radius); padding: 14px; }
+  .card h2 { margin: 0 0 8px 0; font-size: 16px; }
+
+  .compact * { font-size: 13px; }
+  .compact input, .compact select, .compact button { padding: 6px; border-radius: 8px; }
+  .compact .row { gap: 8px 10px; }
+
+  .row { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
+  label { font-size: 13px; color: #333; }
+  input, select, button { padding: 8px; border-radius: 8px; border: 1px solid #cfd1d6; font-size: 14px; }
+  button { background: #111; color:#fff; cursor: pointer; }
+  button.secondary { background:#fff; color:#111; }
+  input[type="number"] { width: 110px; }
+
+  .kpi { display:grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap:10px; margin-top:6px; }
+  .kpi .tile { background:#fafafa; border:1px solid #eee; border-radius:10px; padding:10px; }
+  .muted { color:#666; font-size:12px; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .right { text-align:right; }
+
+  .table-wrap { overflow:auto; border:1px solid #e6e6ee; border-radius: var(--radius); }
+  table { width:100%; border-collapse: collapse; font-size:13px; }
+  th, td { padding: 9px 10px; border-bottom: 1px solid #f0f0f3; white-space: nowrap; }
+  th { position: sticky; top: 0; background: #f5f6fa; z-index: 1; text-align: left; }
+  tbody tr:hover { filter: brightness(0.98); }
+
+  .pos-QB { background: #ffe5e5; } /* red */
+  .pos-RB { background: #e6f0ff; } /* blue */
+  .pos-WR { background: #e8f7e8; } /* green */
+  .pos-TE { background: #fff1e0; } /* orange */
+  .pos-DST, .pos-K { background: #f1f1f1; }
+  .badge { display:inline-block; padding:2px 8px; border-radius:999px; border:1px solid #ddd; font-size:12px; background:#fff; }
+
+  /* Positional Value Tracking */
+  .pv-grid { width: 100%; }
+  .pv-grid th, .pv-grid td { text-align: right; }
+  .pv-grid th:first-child, .pv-grid td:first-child { text-align: left; }
+  .pv-grid .value-pos { font-weight: 600; }
+  .good { color: #0c7a43; }
+  .bad { color: #b00020; }
+  .bucket-1 { background: #fff5c2; }  /* 1 left */
+  .bucket-0 { background: #ffd6d6; }  /* 0 left */
+
+  /* Lineup table */
+  .lineup th { text-align:left; }
+  .lineup td { white-space: normal; }
+  .slot { display:flex; justify-content:space-between; gap:8px; }
+  .slot .name { overflow:hidden; text-overflow:ellipsis; }
+  .slot .price { font-weight:600; }
+
+  /* Draft Log */
+  .log-list { list-style: none; padding: 0; margin: 0; }
+  .log-item { display:flex; justify-content:space-between; gap:10px; padding:6px 0; border-bottom:1px solid #f0f0f3; }
+  .log-item .who { font-weight:600; }
+  .log-item .amt { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Fantasy Auction Assistant — Draft Board</h1>
+</header>
+
+<!-- Embedded full player list from your Excel -->
+<script type="application/json" id="players-data">[{"name":"Ja'Marr Chase","pos":"WR","rank":1,"posRank":1,"tier":"1","base":63.0,"actual":0,"myTeam":false},{"name":"Bijan Robinson","pos":"RB","rank":2,"posRank":1,"tier":"1","base":62.0,"actual":0,"myTeam":false},{"name":"Jahmyr Gibbs","pos":"RB","rank":3,"posRank":2,"tier":"1","base":61.0,"actual":0,"myTeam":false},{"name":"Saquon Barkley","pos":"RB","rank":4,"posRank":3,"tier":"1","base":57.0,"actual":0,"myTeam":false},{"name":"CeeDee Lamb","pos":"WR","rank":5,"posRank":2,"tier":"1","base":60.0,"actual":0,"myTeam":false},{"name":"Justin Jefferson","pos":"WR","rank":6,"posRank":3,"tier":"1","base":58.0,"actual":0,"myTeam":false},{"name":"Christian McCaffrey","pos":"RB","rank":7,"posRank":4,"tier":"1","base":51.0,"actual":0,"myTeam":false},{"name":"Nico Collins","pos":"WR","rank":8,"posRank":4,"tier":"2","base":49.0,"actual":0,"myTeam":false},{"name":"Puka Nacua","pos":"WR","rank":9,"posRank":5,"tier":"2","base":47.0,"actual":0,"myTeam":false},{"name":"Malik Nabers","pos":"WR","rank":10,"posRank":6,"tier":"2","base":45.0,"actual":0,"myTeam":false},{"name":"Drake London","pos":"WR","rank":11,"posRank":7,"tier":"2","base":44.0,"actual":0,"myTeam":false},{"name":"De'Von Achane","pos":"RB","rank":12,"posRank":5,"tier":"2","base":39.0,"actual":0,"myTeam":false},{"name":"Brian Thomas","pos":"WR","rank":13,"posRank":8,"tier":"2","base":42.0,"actual":0,"myTeam":false},{"name":"Amon-Ra St. Brown","pos":"WR","rank":14,"posRank":9,"tier":"2","base":41.0,"actual":0,"myTeam":false},{"name":"Derrick Henry","pos":"RB","rank":15,"posRank":6,"tier":"2","base":36.0,"actual":0,"myTeam":false},{"name":"Ashton Jeanty","pos":"RB","rank":16,"posRank":7,"tier":"3","base":33.0,"actual":0,"myTeam":false},{"name":"AJ Brown","pos":"WR","rank":17,"posRank":10,"tier":"3","base":36.0,"actual":0,"myTeam":false},{"name":"Brock Bowers","pos":"TE","rank":18,"posRank":1,"tier":"3","base":33.0,"actual":0,"myTeam":false},{"name":"Chase Brown","pos":"RB","rank":19,"posRank":8,"tier":"3","base":31.0,"actual":0,"myTeam":false},{"name":"Bucky Irving","pos":"RB","rank":20,"posRank":9,"tier":"4","base":31.0,"actual":0,"myTeam":false},{"name":"Ladd McConkey","pos":"WR","rank":21,"posRank":11,"tier":"4","base":33.0,"actual":0,"myTeam":false},{"name":"Jonathan Taylor","pos":"RB","rank":22,"posRank":10,"tier":"4","base":29.0,"actual":0,"myTeam":false},{"name":"Josh Jacobs","pos":"RB","rank":23,"posRank":11,"tier":"4","base":29.0,"actual":0,"myTeam":false},{"name":"Trey McBride","pos":"TE","rank":24,"posRank":2,"tier":"5","base":29.0,"actual":0,"myTeam":false},{"name":"Josh Allen","pos":"QB","rank":25,"posRank":1,"tier":"5","base":27.0,"actual":0,"myTeam":false},{"name":"Jaxon Smith-Njigba","pos":"WR","rank":26,"posRank":12,"tier":"6","base":29.0,"actual":0,"myTeam":false},{"name":"Omarion Hampton","pos":"RB","rank":27,"posRank":12,"tier":"6","base":26.0,"actual":0,"myTeam":false},{"name":"Tee Higgins","pos":"WR","rank":28,"posRank":13,"tier":"6","base":28.0,"actual":0,"myTeam":false},{"name":"Lamar Jackson","pos":"QB","rank":29,"posRank":2,"tier":"6","base":25.0,"actual":0,"myTeam":false},{"name":"Tyreek Hill","pos":"WR","rank":30,"posRank":14,"tier":"7","base":26.0,"actual":0,"myTeam":false},{"name":"Davante Adams","pos":"WR","rank":31,"posRank":15,"tier":"7","base":25.0,"actual":0,"myTeam":false},{"name":"Kyren Williams","pos":"RB","rank":32,"posRank":13,"tier":"7","base":23.0,"actual":0,"myTeam":false},{"name":"Kenneth Walker","pos":"RB","rank":33,"posRank":14,"tier":"7","base":23.0,"actual":0,"myTeam":false},{"name":"TreVeyon Henderson","pos":"RB","rank":34,"posRank":15,"tier":"7","base":22.0,"actual":0,"myTeam":false},{"name":"Jayden Daniels","pos":"QB","rank":35,"posRank":3,"tier":"7","base":22.0,"actual":0,"myTeam":false},{"name":"Jalen Hurts","pos":"QB","rank":36,"posRank":4,"tier":"7","base":22.0,"actual":0,"myTeam":false},{"name":"Alvin Kamara","pos":"RB","rank":37,"posRank":16,"tier":"7","base":21.0,"actual":0,"myTeam":false},{"name":"George Kittle","pos":"TE","rank":38,"posRank":3,"tier":"7","base":23.0,"actual":0,"myTeam":false},{"name":"Mike Evans","pos":"WR","rank":39,"posRank":16,"tier":"7","base":22.0,"actual":0,"myTeam":false},{"name":"James Cook","pos":"RB","rank":40,"posRank":17,"tier":"7","base":20.0,"actual":0,"myTeam":false},{"name":"Breece Hall","pos":"RB","rank":41,"posRank":18,"tier":"7","base":20.0,"actual":0,"myTeam":false},{"name":"Garrett Wilson","pos":"WR","rank":42,"posRank":17,"tier":"8","base":21.0,"actual":0,"myTeam":false},{"name":"Marvin Harrison","pos":"WR","rank":43,"posRank":18,"tier":"8","base":20.0,"actual":0,"myTeam":false},{"name":"Devonta Smith","pos":"WR","rank":44,"posRank":19,"tier":"8","base":20.0,"actual":0,"myTeam":false},{"name":"Tetairoa McMillan","pos":"WR","rank":45,"posRank":20,"tier":"8","base":20.0,"actual":0,"myTeam":false},{"name":"Jameson Williams","pos":"WR","rank":46,"posRank":21,"tier":"8","base":19.0,"actual":0,"myTeam":false},{"name":"George Pickens","pos":"WR","rank":47,"posRank":22,"tier":"8","base":19.0,"actual":0,"myTeam":false},{"name":"Calvin Ridley","pos":"WR","rank":48,"posRank":23,"tier":"8","base":19.0,"actual":0,"myTeam":false},{"name":"Emeka Egbuka","pos":"WR","rank":49,"posRank":24,"tier":"8","base":18.0,"actual":0,"myTeam":false},{"name":"James Conner","pos":"RB","rank":50,"posRank":19,"tier":"9","base":17.0,"actual":0,"myTeam":false},{"name":"DK Metcalf","pos":"WR","rank":51,"posRank":25,"tier":"9","base":18.0,"actual":0,"myTeam":false},{"name":"Xavier Worthy","pos":"WR","rank":52,"posRank":26,"tier":"9","base":18.0,"actual":0,"myTeam":false},{"name":"Terry McLaurin","pos":"WR","rank":53,"posRank":27,"tier":"9","base":17.0,"actual":0,"myTeam":false},{"name":"Chuba Hubbard","pos":"RB","rank":54,"posRank":20,"tier":"9","base":16.0,"actual":0,"myTeam":false},{"name":"RJ Harvey","pos":"RB","rank":55,"posRank":21,"tier":"9","base":16.0,"actual":0,"myTeam":false},{"name":"Travis Hunter","pos":"WR","rank":56,"posRank":28,"tier":"9","base":17.0,"actual":0,"myTeam":false},{"name":"Jaylen Waddle","pos":"WR","rank":57,"posRank":29,"tier":"9","base":16.0,"actual":0,"myTeam":false},{"name":"Courtland Sutton","pos":"WR","rank":58,"posRank":30,"tier":"9","base":16.0,"actual":0,"myTeam":false},{"name":"DJ Moore","pos":"WR","rank":59,"posRank":31,"tier":"9","base":16.0,"actual":0,"myTeam":false},{"name":"Tony Pollard","pos":"RB","rank":60,"posRank":22,"tier":"10","base":15.0,"actual":0,"myTeam":false},{"name":"Rashee Rice","pos":"WR","rank":61,"posRank":32,"tier":"10","base":15.0,"actual":0,"myTeam":false},{"name":"Joe Burrow","pos":"QB","rank":62,"posRank":5,"tier":"10","base":15.0,"actual":0,"myTeam":false},{"name":"Stefon Diggs","pos":"WR","rank":63,"posRank":33,"tier":"10","base":15.0,"actual":0,"myTeam":false},{"name":"Isiah Pacheco","pos":"RB","rank":64,"posRank":23,"tier":"10","base":14.0,"actual":0,"myTeam":false},{"name":"Zay Flowers","pos":"WR","rank":65,"posRank":34,"tier":"10","base":14.0,"actual":0,"myTeam":false},{"name":"Ricky Pearsall","pos":"WR","rank":66,"posRank":35,"tier":"10","base":14.0,"actual":0,"myTeam":false},{"name":"Rome Odunze","pos":"WR","rank":67,"posRank":36,"tier":"10","base":14.0,"actual":0,"myTeam":false},{"name":"Jakobi Meyers","pos":"WR","rank":68,"posRank":37,"tier":"10","base":14.0,"actual":0,"myTeam":false},{"name":"D'Andre Swift","pos":"RB","rank":69,"posRank":24,"tier":"11","base":13.0,"actual":0,"myTeam":false},{"name":"David Montgomery","pos":"RB","rank":70,"posRank":25,"tier":"11","base":13.0,"actual":0,"myTeam":false},{"name":"Chris Olave","pos":"WR","rank":71,"posRank":38,"tier":"11","base":13.0,"actual":0,"myTeam":false},{"name":"Aaron Jones","pos":"RB","rank":72,"posRank":26,"tier":"11","base":13.0,"actual":0,"myTeam":false},{"name":"Jerry Jeudy","pos":"WR","rank":73,"posRank":39,"tier":"11","base":13.0,"actual":0,"myTeam":false},{"name":"Jauan Jennings","pos":"WR","rank":74,"posRank":40,"tier":"11","base":13.0,"actual":0,"myTeam":false},{"name":"Matthew Golden","pos":"WR","rank":75,"posRank":41,"tier":"11","base":12.0,"actual":0,"myTeam":false},{"name":"Jordan Addison","pos":"WR","rank":76,"posRank":42,"tier":"12","base":12.0,"actual":0,"myTeam":false},{"name":"Sam LaPorta","pos":"TE","rank":77,"posRank":4,"tier":"12","base":15.0,"actual":0,"myTeam":false},{"name":"Deebo Samuel","pos":"WR","rank":78,"posRank":43,"tier":"12","base":12.0,"actual":0,"myTeam":false},{"name":"Jaylen Warren","pos":"RB","rank":79,"posRank":27,"tier":"13","base":12.0,"actual":0,"myTeam":false},{"name":"Tyrone Tracy","pos":"RB","rank":80,"posRank":28,"tier":"13","base":12.0,"actual":0,"myTeam":false},{"name":"Kaleb Johnson","pos":"RB","rank":81,"posRank":29,"tier":"13","base":11.0,"actual":0,"myTeam":false},{"name":"Khalil Shakir","pos":"WR","rank":82,"posRank":44,"tier":"13","base":11.0,"actual":0,"myTeam":false},{"name":"TJ Hockenson","pos":"TE","rank":83,"posRank":5,"tier":"13","base":14.0,"actual":0,"myTeam":false},{"name":"JK Dobbins","pos":"RB","rank":84,"posRank":30,"tier":"14","base":11.0,"actual":0,"myTeam":false},{"name":"Jayden Reed","pos":"WR","rank":85,"posRank":45,"tier":"14","base":11.0,"actual":0,"myTeam":false},{"name":"Keon Coleman","pos":"WR","rank":86,"posRank":46,"tier":"14","base":10.0,"actual":0,"myTeam":false},{"name":"Patrick Mahomes","pos":"QB","rank":87,"posRank":6,"tier":"15","base":11.0,"actual":0,"myTeam":false},{"name":"Justin Fields","pos":"QB","rank":88,"posRank":7,"tier":"15","base":11.0,"actual":0,"myTeam":false},{"name":"Kyler Murray","pos":"QB","rank":89,"posRank":8,"tier":"15","base":11.0,"actual":0,"myTeam":false},{"name":"Cooper Kupp","pos":"WR","rank":90,"posRank":47,"tier":"15","base":10.0,"actual":0,"myTeam":false},{"name":"Josh Downs","pos":"WR","rank":91,"posRank":48,"tier":"15","base":10.0,"actual":0,"myTeam":false},{"name":"Mark Andrews","pos":"TE","rank":92,"posRank":6,"tier":"15","base":10.0,"actual":0,"myTeam":false},{"name":"Drake Maye","pos":"QB","rank":93,"posRank":9,"tier":"15","base":10.0,"actual":0,"myTeam":false},{"name":"Bo Nix","pos":"QB","rank":94,"posRank":10,"tier":"15","base":10.0,"actual":0,"myTeam":false},{"name":"Caleb Williams","pos":"QB","rank":95,"posRank":11,"tier":"15","base":10.0,"actual":0,"myTeam":false},{"name":"Jordan Mason","pos":"RB","rank":96,"posRank":31,"tier":"16","base":9.0,"actual":0,"myTeam":false},{"name":"Brock Purdy","pos":"QB","rank":97,"posRank":12,"tier":"16","base":9.0,"actual":0,"myTeam":false},{"name":"Dak Prescott","pos":"QB","rank":98,"posRank":13,"tier":"16","base":9.0,"actual":0,"myTeam":false},{"name":"Baker Mayfield","pos":"QB","rank":99,"posRank":14,"tier":"16","base":9.0,"actual":0,"myTeam":false},{"name":"Rashid Shaheed","pos":"WR","rank":100,"posRank":49,"tier":"16","base":8.0,"actual":0,"myTeam":false},{"name":"Chris Godwin","pos":"WR","rank":101,"posRank":50,"tier":"16","base":8.0,"actual":0,"myTeam":false},{"name":"Michael Pittman","pos":"WR","rank":102,"posRank":51,"tier":"16","base":8.0,"actual":0,"myTeam":false},{"name":"Christian Kirk","pos":"WR","rank":103,"posRank":52,"tier":"16","base":8.0,"actual":0,"myTeam":false},{"name":"Justin Herbert","pos":"QB","rank":104,"posRank":15,"tier":"16","base":9.0,"actual":0,"myTeam":false},{"name":"Evan Engram","pos":"TE","rank":105,"posRank":7,"tier":"16","base":8.0,"actual":0,"myTeam":false},{"name":"Darnell Mooney","pos":"WR","rank":106,"posRank":53,"tier":"16","base":7.0,"actual":0,"myTeam":false},{"name":"Travis Kelce","pos":"TE","rank":107,"posRank":8,"tier":"16","base":8.0,"actual":0,"myTeam":false},{"name":"Travis Etienne","pos":"RB","rank":108,"posRank":32,"tier":"16","base":8.0,"actual":0,"myTeam":false},{"name":"Zach Charbonnet","pos":"RB","rank":109,"posRank":33,"tier":"17","base":8.0,"actual":0,"myTeam":false},{"name":"Cam Skattebo","pos":"RB","rank":110,"posRank":34,"tier":"17","base":8.0,"actual":0,"myTeam":false},{"name":"Luther Burden","pos":"WR","rank":111,"posRank":54,"tier":"17","base":7.0,"actual":0,"myTeam":false},{"name":"Tucker Kraft","pos":"TE","rank":112,"posRank":9,"tier":"17","base":8.0,"actual":0,"myTeam":false},{"name":"Jayden Higgins","pos":"WR","rank":113,"posRank":55,"tier":"17","base":6.0,"actual":0,"myTeam":false},{"name":"David Njoku","pos":"TE","rank":114,"posRank":10,"tier":"17","base":7.0,"actual":0,"myTeam":false},{"name":"Tyler Warren","pos":"TE","rank":115,"posRank":11,"tier":"17","base":7.0,"actual":0,"myTeam":false},{"name":"Trevor Lawrence","pos":"QB","rank":116,"posRank":16,"tier":"18","base":7.0,"actual":0,"myTeam":false},{"name":"Jacory Croskey-Merritt","pos":"RB","rank":117,"posRank":35,"tier":"18","base":7.0,"actual":0,"myTeam":false},{"name":"Keenan Allen","pos":"WR","rank":118,"posRank":56,"tier":"18","base":6.0,"actual":0,"myTeam":false},{"name":"Tank Bigsby","pos":"RB","rank":119,"posRank":36,"tier":"18","base":7.0,"actual":0,"myTeam":false},{"name":"Brandon Aiyuk","pos":"WR","rank":120,"posRank":57,"tier":"18","base":6.0,"actual":0,"myTeam":false},{"name":"Bhayshul Tuten","pos":"RB","rank":121,"posRank":37,"tier":"18","base":7.0,"actual":0,"myTeam":false},{"name":"Jaydon Blue","pos":"RB","rank":122,"posRank":38,"tier":"18","base":6.0,"actual":0,"myTeam":false},{"name":"Jordan Love","pos":"QB","rank":123,"posRank":17,"tier":"18","base":7.0,"actual":0,"myTeam":false},{"name":"Colston Loveland","pos":"TE","rank":124,"posRank":12,"tier":"18","base":6.0,"actual":0,"myTeam":false},{"name":"Austin Ekeler","pos":"RB","rank":125,"posRank":39,"tier":"19","base":6.0,"actual":0,"myTeam":false},{"name":"Javonte Williams","pos":"RB","rank":126,"posRank":40,"tier":"19","base":6.0,"actual":0,"myTeam":false},{"name":"Rhamondre Stevenson","pos":"RB","rank":127,"posRank":41,"tier":"19","base":6.0,"actual":0,"myTeam":false},{"name":"Marvin Mims","pos":"WR","rank":128,"posRank":58,"tier":"19","base":5.0,"actual":0,"myTeam":false},{"name":"Dallas Goedert","pos":"TE","rank":129,"posRank":13,"tier":"19","base":6.0,"actual":0,"myTeam":false},{"name":"Braelon Allen","pos":"RB","rank":130,"posRank":42,"tier":"19","base":6.0,"actual":0,"myTeam":false},{"name":"Ray Davis","pos":"RB","rank":131,"posRank":43,"tier":"20","base":6.0,"actual":0,"myTeam":false},{"name":"Tyjae Spears","pos":"RB","rank":132,"posRank":44,"tier":"20","base":5.0,"actual":0,"myTeam":false},{"name":"Woody Marks","pos":"RB","rank":133,"posRank":45,"tier":"20","base":5.0,"actual":0,"myTeam":false},{"name":"Nick Chubb","pos":"RB","rank":134,"posRank":46,"tier":"20","base":5.0,"actual":0,"myTeam":false},{"name":"JJ McCarthy","pos":"QB","rank":135,"posRank":18,"tier":"20","base":4.0,"actual":0,"myTeam":false},{"name":"Dalton Kincaid","pos":"TE","rank":136,"posRank":14,"tier":"20","base":5.0,"actual":0,"myTeam":false},{"name":"Demario Douglas","pos":"WR","rank":137,"posRank":59,"tier":"20","base":4.0,"actual":0,"myTeam":false},{"name":"Trey Benson","pos":"RB","rank":138,"posRank":47,"tier":"20","base":5.0,"actual":0,"myTeam":false},{"name":"Jared Goff","pos":"QB","rank":139,"posRank":19,"tier":"20","base":4.0,"actual":0,"myTeam":false},{"name":"Jake Ferguson","pos":"TE","rank":140,"posRank":15,"tier":"20","base":5.0,"actual":0,"myTeam":false},{"name":"Cedric Tillman","pos":"WR","rank":141,"posRank":60,"tier":"20","base":3.0,"actual":0,"myTeam":false},{"name":"Kyle Pitts","pos":"TE","rank":142,"posRank":16,"tier":"20","base":3.0,"actual":0,"myTeam":false},{"name":"CJ Stroud","pos":"QB","rank":143,"posRank":20,"tier":"20","base":4.0,"actual":0,"myTeam":false},{"name":"Josh Palmer","pos":"WR","rank":144,"posRank":61,"tier":"21","base":2.0,"actual":0,"myTeam":false},{"name":"Rico Dowdle","pos":"RB","rank":145,"posRank":48,"tier":"21","base":3.0,"actual":0,"myTeam":false},{"name":"Tre Harris","pos":"WR","rank":146,"posRank":62,"tier":"21","base":2.0,"actual":0,"myTeam":false},{"name":"Hollywood Brown","pos":"WR","rank":147,"posRank":63,"tier":"21","base":2.0,"actual":0,"myTeam":false},{"name":"Dylan Sampson","pos":"RB","rank":148,"posRank":49,"tier":"21","base":3.0,"actual":0,"myTeam":false},{"name":"Pat Bryant","pos":"WR","rank":149,"posRank":64,"tier":"21","base":1.0,"actual":0,"myTeam":false},{"name":"Rashod Bateman","pos":"WR","rank":150,"posRank":65,"tier":"21","base":1.0,"actual":0,"myTeam":false},{"name":"Romeo Doubs","pos":"WR","rank":151,"posRank":66,"tier":"21","base":1.0,"actual":0,"myTeam":false},{"name":"Isaac Guerendo","pos":"RB","rank":152,"posRank":50,"tier":"21","base":1.0,"actual":0,"myTeam":false},{"name":"Chig Okonkwo","pos":"TE","rank":153,"posRank":17,"tier":"22","base":1.0,"actual":0,"myTeam":false},{"name":"Jerome Ford","pos":"RB","rank":154,"posRank":51,"tier":"22","base":1.0,"actual":0,"myTeam":false},{"name":"Adam Thielen","pos":"WR","rank":155,"posRank":67,"tier":"22","base":1.0,"actual":0,"myTeam":false},{"name":"Kyle Williams","pos":"WR","rank":156,"posRank":68,"tier":"22","base":1.0,"actual":0,"myTeam":false},{"name":"Rachaad White","pos":"RB","rank":157,"posRank":52,"tier":"22","base":1.0,"actual":0,"myTeam":false},{"name":"Bryce Young","pos":"QB","rank":158,"posRank":21,"tier":"22","base":1.0,"actual":0,"myTeam":false},{"name":"Brian Robinson","pos":"RB","rank":159,"posRank":53,"tier":"22","base":1.0,"actual":0,"myTeam":false},{"name":"Brenton Strange","pos":"TE","rank":160,"posRank":18,"tier":"22","base":1.0,"actual":0,"myTeam":false},{"name":"Michael Penix","pos":"QB","rank":161,"posRank":22,"tier":"22","base":1.0,"actual":0,"myTeam":false},{"name":"Hunter Henry","pos":"TE","rank":162,"posRank":19,"tier":"22","base":1.0,"actual":0,"myTeam":false},{"name":"Zach Ertz","pos":"TE","rank":163,"posRank":20,"tier":"22","base":1.0,"actual":0,"myTeam":false},{"name":"Wan'Dale Robinson","pos":"WR","rank":164,"posRank":69,"tier":"23","base":1.0,"actual":0,"myTeam":false},{"name":"Quinshon Judkins","pos":"RB","rank":165,"posRank":54,"tier":"23","base":1.0,"actual":0,"myTeam":false},{"name":"Joe Mixon","pos":"RB","rank":166,"posRank":55,"tier":"23","base":1.0,"actual":0,"myTeam":false},{"name":"Tyler Allgeier","pos":"RB","rank":167,"posRank":56,"tier":"23","base":1.0,"actual":0,"myTeam":false},{"name":"Mason Taylor","pos":"TE","rank":168,"posRank":21,"tier":"23","base":1.0,"actual":0,"myTeam":false},{"name":"Tua Tagovailoa","pos":"QB","rank":169,"posRank":23,"tier":"23","base":1.0,"actual":0,"myTeam":false},{"name":"Cam Ward","pos":"QB","rank":170,"posRank":24,"tier":"23","base":1.0,"actual":0,"myTeam":false},{"name":"Geno Smith","pos":"QB","rank":171,"posRank":25,"tier":"23","base":1.0,"actual":0,"myTeam":false},{"name":"Xavier Legette","pos":"WR","rank":172,"posRank":70,"tier":"23","base":1.0,"actual":0,"myTeam":false},{"name":"Jalen Coker","pos":"WR","rank":173,"posRank":71,"tier":"23","base":1.0,"actual":0,"myTeam":false},{"name":"Sean Tucker","pos":"RB","rank":174,"posRank":57,"tier":"23","base":1.0,"actual":0,"myTeam":false},{"name":"Kyle Monangai","pos":"RB","rank":175,"posRank":58,"tier":"23","base":1.0,"actual":0,"myTeam":false},{"name":"Adonai Mitchell","pos":"WR","rank":176,"posRank":72,"tier":"23","base":1.0,"actual":0,"myTeam":false},{"name":"Najee Harris","pos":"RB","rank":177,"posRank":59,"tier":"24","base":1.0,"actual":0,"myTeam":false},{"name":"Tory Horton","pos":"WR","rank":178,"posRank":73,"tier":"24","base":1.0,"actual":0,"myTeam":false},{"name":"Chris Rodriguez","pos":"RB","rank":179,"posRank":60,"tier":"24","base":1.0,"actual":0,"myTeam":false},{"name":"Ollie Gordon","pos":"RB","rank":180,"posRank":61,"tier":"24","base":1.0,"actual":0,"myTeam":false},{"name":"Justice Hill","pos":"RB","rank":181,"posRank":62,"tier":"24","base":1.0,"actual":0,"myTeam":false},{"name":"Jaylen Wright","pos":"RB","rank":182,"posRank":63,"tier":"24","base":1.0,"actual":0,"myTeam":false},{"name":"Dont'e Thornton","pos":"WR","rank":183,"posRank":74,"tier":"24","base":1.0,"actual":0,"myTeam":false},{"name":"Roschon Johnson","pos":"RB","rank":184,"posRank":64,"tier":"24","base":1.0,"actual":0,"myTeam":false},{"name":"Aaron Rodgers","pos":"QB","rank":185,"posRank":26,"tier":"25","base":1.0,"actual":0,"myTeam":false},{"name":"Elijah Arroyo","pos":"TE","rank":186,"posRank":22,"tier":"25","base":1.0,"actual":0,"myTeam":false},{"name":"Jack Bech","pos":"WR","rank":187,"posRank":75,"tier":"25","base":1.0,"actual":0,"myTeam":false},{"name":"Jalen Royals","pos":"WR","rank":188,"posRank":76,"tier":"25","base":1.0,"actual":0,"myTeam":false},{"name":"Troy Franklin","pos":"WR","rank":189,"posRank":77,"tier":"25","base":1.0,"actual":0,"myTeam":false},{"name":"Jonnu Smith","pos":"TE","rank":190,"posRank":23,"tier":"25","base":1.0,"actual":0,"myTeam":false},{"name":"Tahj Brooks","pos":"RB","rank":191,"posRank":65,"tier":"25","base":1.0,"actual":0,"myTeam":false},{"name":"Matthew Stafford","pos":"QB","rank":192,"posRank":27,"tier":"26","base":1.0,"actual":0,"myTeam":false},{"name":"DeAndre Hopkins","pos":"WR","rank":193,"posRank":78,"tier":"26","base":1.0,"actual":0,"myTeam":false},{"name":"Isaiah Likely","pos":"TE","rank":194,"posRank":24,"tier":"26","base":1.0,"actual":0,"myTeam":false},{"name":"Isaac TeSlaa","pos":"WR","rank":195,"posRank":79,"tier":"26","base":1.0,"actual":0,"myTeam":false},{"name":"Pat Freiermuth","pos":"TE","rank":196,"posRank":25,"tier":"26","base":1.0,"actual":0,"myTeam":false},{"name":"Theo Johnson","pos":"TE","rank":197,"posRank":26,"tier":"26","base":1.0,"actual":0,"myTeam":false},{"name":"Brashard Smith","pos":"RB","rank":198,"posRank":66,"tier":"26","base":1.0,"actual":0,"myTeam":false},{"name":"Jarquez Hunter","pos":"RB","rank":199,"posRank":67,"tier":"26","base":1.0,"actual":0,"myTeam":false},{"name":"Dyami Brown","pos":"WR","rank":200,"posRank":80,"tier":"26","base":1.0,"actual":0,"myTeam":false},{"name":"Jaylin Noel","pos":"WR","rank":201,"posRank":81,"tier":"26","base":1.0,"actual":0,"myTeam":false},{"name":"DJ Giddens","pos":"RB","rank":202,"posRank":68,"tier":"27","base":1.0,"actual":0,"myTeam":false},{"name":"Alec Pierce","pos":"WR","rank":203,"posRank":82,"tier":"27","base":1.0,"actual":0,"myTeam":false},{"name":"Olamide Zaccheaus","pos":"WR","rank":204,"posRank":83,"tier":"27","base":1.0,"actual":0,"myTeam":false},{"name":"Mike Gesicki","pos":"TE","rank":205,"posRank":27,"tier":"27","base":1.0,"actual":0,"myTeam":false},{"name":"Ja'Tavion Sanders","pos":"TE","rank":206,"posRank":28,"tier":"27","base":1.0,"actual":0,"myTeam":false},{"name":"Will Shipley","pos":"RB","rank":207,"posRank":69,"tier":"27","base":1.0,"actual":0,"myTeam":false},{"name":"KeAndre Lambert-Smith","pos":"WR","rank":208,"posRank":84,"tier":"27","base":1.0,"actual":0,"myTeam":false},{"name":"Keaton Mitchell","pos":"RB","rank":209,"posRank":70,"tier":"27","base":1.0,"actual":0,"myTeam":false},{"name":"Roman Wilson","pos":"WR","rank":210,"posRank":85,"tier":"27","base":1.0,"actual":0,"myTeam":false},{"name":"Kareem Hunt","pos":"RB","rank":211,"posRank":71,"tier":"28","base":1.0,"actual":0,"myTeam":false},{"name":"Juwan Johnson","pos":"TE","rank":212,"posRank":29,"tier":"28","base":1.0,"actual":0,"myTeam":false},{"name":"Elic Ayomanor","pos":"WR","rank":213,"posRank":86,"tier":"28","base":1.0,"actual":0,"myTeam":false},{"name":"Cade Otton","pos":"TE","rank":214,"posRank":30,"tier":"28","base":1.0,"actual":0,"myTeam":false},{"name":"Darius Slayton","pos":"WR","rank":215,"posRank":87,"tier":"28","base":1.0,"actual":0,"myTeam":false},{"name":"Malik Washington","pos":"WR","rank":216,"posRank":88,"tier":"28","base":1.0,"actual":0,"myTeam":false},{"name":"Oronde Gadsden","pos":"TE","rank":217,"posRank":31,"tier":"29","base":1.0,"actual":0,"myTeam":false},{"name":"Diontae Johnson","pos":"WR","rank":218,"posRank":89,"tier":"29","base":1.0,"actual":0,"myTeam":false},{"name":"Blake Corum","pos":"RB","rank":219,"posRank":72,"tier":"29","base":1.0,"actual":0,"myTeam":false},{"name":"Dontayvion Wicks","pos":"WR","rank":220,"posRank":90,"tier":"29","base":1.0,"actual":0,"myTeam":false},{"name":"Jaleel McLaughlin","pos":"RB","rank":221,"posRank":73,"tier":"29","base":1.0,"actual":0,"myTeam":false},{"name":"Tyler Lockett","pos":"WR","rank":222,"posRank":91,"tier":"29","base":1.0,"actual":0,"myTeam":false},{"name":"Calvin Austin","pos":"WR","rank":223,"posRank":92,"tier":"29","base":1.0,"actual":0,"myTeam":false},{"name":"Andrei Iosivas","pos":"WR","rank":224,"posRank":93,"tier":"29","base":1.0,"actual":0,"myTeam":false},{"name":"Miles Sanders","pos":"RB","rank":225,"posRank":74,"tier":"30","base":1.0,"actual":0,"myTeam":false},{"name":"Elijah Mitchell","pos":"RB","rank":226,"posRank":75,"tier":"30","base":1.0,"actual":0,"myTeam":false},{"name":"Tyler Higbee","pos":"TE","rank":227,"posRank":32,"tier":"30","base":1.0,"actual":0,"myTeam":false},{"name":"Amari Cooper","pos":"WR","rank":228,"posRank":94,"tier":"30","base":1.0,"actual":0,"myTeam":false},{"name":"Dalton Schultz","pos":"TE","rank":229,"posRank":33,"tier":"30","base":1.0,"actual":0,"myTeam":false},{"name":"Sam Darnold","pos":"QB","rank":230,"posRank":28,"tier":"30","base":1.0,"actual":0,"myTeam":false},{"name":"Jordan Whittington","pos":"WR","rank":231,"posRank":95,"tier":"30","base":1.0,"actual":0,"myTeam":false},{"name":"Kendre Miller","pos":"RB","rank":232,"posRank":76,"tier":"30","base":1.0,"actual":0,"myTeam":false},{"name":"Harold Fannin","pos":"TE","rank":233,"posRank":34,"tier":"30","base":1.0,"actual":0,"myTeam":false},{"name":"Russell Wilson","pos":"QB","rank":234,"posRank":29,"tier":"31","base":1.0,"actual":0,"myTeam":false},{"name":"Emanuel Wilson","pos":"RB","rank":235,"posRank":77,"tier":"31","base":1.0,"actual":0,"myTeam":false},{"name":"Joe Flacco","pos":"QB","rank":236,"posRank":30,"tier":"31","base":1.0,"actual":0,"myTeam":false},{"name":"Michael Wilson","pos":"WR","rank":237,"posRank":96,"tier":"31","base":1.0,"actual":0,"myTeam":false},{"name":"Darren Waller","pos":"TE","rank":238,"posRank":35,"tier":"31","base":1.0,"actual":0,"myTeam":false},{"name":"Raheem Mostert","pos":"RB","rank":239,"posRank":78,"tier":"31","base":1.0,"actual":0,"myTeam":false},{"name":"Jaxson Dart","pos":"QB","rank":240,"posRank":31,"tier":"32","base":1.0,"actual":0,"myTeam":false},{"name":"Trevor Etienne","pos":"RB","rank":241,"posRank":79,"tier":"32","base":1.0,"actual":0,"myTeam":false},{"name":"Noah Gray","pos":"TE","rank":242,"posRank":36,"tier":"32","base":1.0,"actual":0,"myTeam":false},{"name":"Quentin Johnston","pos":"WR","rank":243,"posRank":97,"tier":"32","base":1.0,"actual":0,"myTeam":false},{"name":"Elijah Moore","pos":"WR","rank":244,"posRank":98,"tier":"32","base":1.0,"actual":0,"myTeam":false},{"name":"Tutu Atwell","pos":"WR","rank":245,"posRank":99,"tier":"32","base":1.0,"actual":0,"myTeam":false},{"name":"Isaiah Davis","pos":"RB","rank":246,"posRank":80,"tier":"32","base":1.0,"actual":0,"myTeam":false},{"name":"Devaughn Vele","pos":"WR","rank":247,"posRank":100,"tier":"32","base":1.0,"actual":0,"myTeam":false},{"name":"Jalen Nailor","pos":"WR","rank":248,"posRank":101,"tier":"32","base":1.0,"actual":0,"myTeam":false},{"name":"Jalen Tolbert","pos":"WR","rank":249,"posRank":102,"tier":"33","base":1.0,"actual":0,"myTeam":false},{"name":"Tre Tucker","pos":"WR","rank":250,"posRank":103,"tier":"33","base":1.0,"actual":0,"myTeam":false}]</script>
+
+<main class="main-grid">
+  <!-- LEFT COLUMN: League & Team (top) + My Team (below) -->
+  <section class="col-1 row-1 stack">
+    <div class="card compact">
+      <h2>League & Team</h2>
+      <div class="row">
+        <label>Teams <input id="teamsCount" type="number" min="2" value="12"></label>
+        <label>Budget <input id="budgetPerTeam" type="number" min="1" value="200"></label>
+        <label>Your Team <input id="yourTeamName" type="text" value="You"></label>
+        <label>Bench <input id="benchSlots" type="number" min="0" value="6"></label>
+      </div>
+      <div class="kpi">
+        <div class="tile"><div class="muted">Remaining</div><div class="mono" id="yourRemaining">$0</div></div>
+        <div class="tile"><div class="muted">Rostered</div><div class="mono" id="yourPlayers">0</div></div>
+        <div class="tile"><div class="muted">Max Bid</div><div class="mono" id="yourMaxBid">$0</div></div>
+      </div>
+      <div class="row" style="margin-top:8px; gap:8px;">
+        <button id="exportBtn" class="secondary">Export State (JSON)</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>My Team (Lineup)</h2>
+      <div class="table-wrap">
+        <table class="lineup">
+          <thead>
+            <tr><th>Slot</th><th>Player</th><th class="right">Paid</th></tr>
+          </thead>
+          <tbody id="lineupBody"></tbody>
+          <tfoot>
+            <tr><th colspan="2" class="right">Total Paid</th><th class="right" id="lineupPaid">$0</th></tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- MIDDLE COLUMN STACK: Recs -> PV -> Filters -> Draft Board -->
+  <section class="card col-2 row-1">
+    <h2>Recommended Players Available</h2>
+    <div class="table-wrap">
+      <table id="recsTable">
+        <thead>
+          <tr><th>Pos</th><th>Player</th><th class="right">Rec. $</th><th class="right">Rank</th></tr>
+        </thead>
+        <tbody id="recsBody"></tbody>
+      </table>
+    </div>
+    <div class="muted" style="margin-top:6px;">Top 10 remaining players that fit your <b>current starting needs</b> (includes FLEX if open).</div>
+  </section>
+
+  <section class="card col-2 row-2">
+    <h2>Positional Value Tracking</h2>
+    <div class="table-wrap">
+      <table class="pv-grid" id="pvTable">
+        <thead id="pvHead"></thead>
+        <tbody id="pvBody"></tbody>
+      </table>
+    </div>
+    <div class="muted" style="margin-top:6px;">
+      Buckets: 1–5, 6–10, 11–15, 16–20, 21–25, 26–30, 31–40, 41–50
+      (<span class="bucket-1">yellow at 1</span>, <span class="bucket-0">red at 0</span>).
+    </div>
+  </section>
+
+  <section class="card col-2 row-3">
+    <h2>Filters</h2>
+    <div class="controls">
+      <label>Search <input id="search" type="text" placeholder="Search player..."></label>
+      <label>Position
+        <select id="filterPos">
+          <option value="">All</option>
+          <option>QB</option><option>RB</option><option>WR</option><option>TE</option><option>DST</option><option>K</option>
+        </select>
+      </label>
+      <label>Tier
+        <select id="filterTier">
+          <option value="">All</option>
+          <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option>
+        </select>
+      </label>
+      <button id="clearFilters">Clear</button>
+    </div>
+  </section>
+
+  <section class="card col-2 row-4">
+    <h2>Draft Board</h2>
+    <div class="table-wrap">
+      <table id="board">
+        <thead>
+          <tr>
+            <th>Player Name</th>
+            <th>Position</th>
+            <th>Rank</th>
+            <th>Position Rank</th>
+            <th>Tier</th>
+            <th class="right">Recommended Auction Value</th>
+            <th class="right">Actual Auction Value</th>
+            <th>My Team?</th>
+          </tr>
+        </thead>
+        <tbody id="boardBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- RIGHT COLUMN: Draft Log (slightly wider) -->
+  <section class="card col-3 row-1" style="grid-row: 1 / span 4;">
+    <h2>Draft Log</h2>
+    <ul id="draftLog" class="log-list"></ul>
+  </section>
+</main>
+
+<script>
+/* ---------- Data & state ---------- */
+const raw = document.getElementById("players-data").textContent || "[]";
+let embeddedPlayers = [];
+try { embeddedPlayers = JSON.parse(raw); } catch(_) { embeddedPlayers = []; }
+
+const LS_KEY = "ffa_draft_board_v14";
+const state = {
+  settings: {
+    teamsCount: 12,
+    budgetPerTeam: 200,
+    yourTeamName: "You",
+    benchSlots: 6,
+    // Lineup: 1 QB, 2 RB, 2 WR, 1 TE, 1 FLEX, 1 DST, 1 K
+    slots: { QB:1, RB:2, WR:2, TE:1, FLEX:1, DST:1, K:1 }
+  },
+  players: embeddedPlayers, // load embedded by default
+  log: []      // [{time, name, pos, actual}]
+};
+
+function save(){ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
+function load(){ const s = localStorage.getItem(LS_KEY); if (!s) return false; try { Object.assign(state, JSON.parse(s)); return true; } catch { return false; } }
+function dollars(x){ if (!isFinite(x)) return "$0"; return "$" + Math.round(x); }
+
+/* ---------- KPIs ---------- */
+function totalSlotsPerTeam(){
+  const s = state.settings.slots, bench = Number(state.settings.benchSlots)||0;
+  return s.QB + s.RB + s.WR + s.TE + s.FLEX + s.DST + s.K + bench;
+}
+function computeKPIs(){
+  const spent = state.players.reduce((sum,p)=> sum + (p.myTeam ? (Number(p.actual)||0) : 0), 0);
+  const remaining = (Number(state.settings.budgetPerTeam)||200) - spent;
+  const yourCount = state.players.filter(p=>p.myTeam && Number(p.actual)>0).length;
+  const openSlots = Math.max(0, totalSlotsPerTeam() - yourCount);
+  const maxBid = Math.max(0, remaining - Math.max(0, openSlots - 1));
+  document.getElementById("yourRemaining").textContent = dollars(remaining);
+  document.getElementById("yourPlayers").textContent = yourCount;
+  document.getElementById("yourMaxBid").textContent = dollars(maxBid);
+}
+
+/* ---------- Lineup auto-fill ---------- */
+function assignRoster(){
+  const s = state.settings.slots;
+  const L = { QB:[], RB:[], WR:[], TE:[], FLEX:[], DST:[], K:[], BENCH:[] };
+  const canFlex = pos => (pos==="RB"||pos==="WR"||pos==="TE");
+  const mine = state.players.filter(p=>p.myTeam && Number(p.actual)>0).sort((a,b)=> a.rank - b.rank);
+
+  for (const p of mine){
+    let placed = false;
+    // Primary slot
+    if (p.pos in L){
+      const need = s[p.pos] || 0;
+      if (L[p.pos].length < need){ L[p.pos].push(p); placed = true; }
+    }
+    // FLEX
+    if (!placed && canFlex(p.pos)){
+      const needF = s.FLEX || 0;
+      if (L.FLEX.length < needF){ L.FLEX.push(p); placed = true; }
+    }
+    // BENCH
+    if (!placed){
+      const benchNeed = Number(state.settings.benchSlots)||6;
+      if (L.BENCH.length < benchNeed){ L.BENCH.push(p); placed = true; }
+    }
+  }
+  return L;
+}
+function renderLineup(){
+  const body = document.getElementById("lineupBody");
+  const paidCell = document.getElementById("lineupPaid");
+  const s = state.settings.slots;
+  const L = assignRoster();
+  body.innerHTML = "";
+  let paid = 0;
+
+  function rowFor(slot, arr, maxCount){
+    for (let i=0; i<maxCount; i++){
+      const p = arr[i];
+      const name = p ? p.name : "<span class='muted'>—</span>";
+      const price = p ? dollars(Number(p.actual)||0) : "$0";
+      if (p) paid += Number(p.actual)||0;
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${slot}</td><td class="slot"><span class="name">${name}</span></td><td class="right price">${price}</td>`;
+      body.appendChild(tr);
+    }
+  }
+
+  rowFor("QB", L.QB, s.QB||0);
+  rowFor("RB", L.RB, s.RB||0);
+  rowFor("WR", L.WR, s.WR||0);
+  rowFor("TE", L.TE, s.TE||0);
+  rowFor("FLEX", L.FLEX, s.FLEX||0);
+  rowFor("DST", L.DST, s.DST||0);
+  rowFor("K", L.K, s.K||0);
+  rowFor("BENCH", L.BENCH, Number(state.settings.benchSlots)||6);
+
+  paidCell.textContent = dollars(paid);
+}
+
+/* ---------- Recommended Players (Top 10) ---------- */
+function computeNeeds(){
+  const s = state.settings.slots;
+  const L = assignRoster(); // based on drafted + myTeam
+  return {
+    QB: Math.max(0, (s.QB||0) - L.QB.length),
+    RB: Math.max(0, (s.RB||0) - L.RB.length),
+    WR: Math.max(0, (s.WR||0) - L.WR.length),
+    TE: Math.max(0, (s.TE||0) - L.TE.length),
+    DST: Math.max(0, (s.DST||0) - L.DST.length),
+    K:  Math.max(0, (s.K||0)  - L.K.length),
+    FLEX: Math.max(0, (s.FLEX||0) - L.FLEX.length),
+  };
+}
+function renderRecommendations(){
+  const body = document.getElementById("recsBody");
+  body.innerHTML = "";
+  const needs = computeNeeds();
+
+  const neededPositions = new Set();
+  for (const pos of ["QB","RB","WR","TE","DST","K"]) if ((needs[pos]||0) > 0) neededPositions.add(pos);
+  if ((needs.FLEX||0) > 0) { neededPositions.add("RB"); neededPositions.add("WR"); neededPositions.add("TE"); }
+
+  const remaining = state.players.filter(p => Number(p.actual) === 0);
+  const pool = remaining.filter(p => neededPositions.has(p.pos)).sort((a,b)=> a.rank - b.rank);
+  const top10 = pool.slice(0, 10);
+  if (!top10.length){
+    body.innerHTML = `<tr><td colspan="4" class="muted">No immediate starting needs. Track value and bench depth.</td></tr>`;
+    return;
+  }
+  body.innerHTML = top10.map(p => `<tr><td>${p.pos}</td><td>${p.name}</td><td class="right mono">${dollars(p.base)}</td><td class="right">${p.rank}</td></tr>`).join("");
+}
+
+/* ---------- Positional Value Tracking ---------- */
+function buildBuckets(){
+  const buckets = [];
+  for (let start=1; start<=30; start+=5){ buckets.push([start, start+4]); }   // 1–5 … 26–30
+  buckets.push([31,40]);
+  buckets.push([41,50]);
+  return buckets;
+}
+function formatPositionalValue(pos){
+  const drafted = state.players.filter(p => p.pos === pos && Number(p.actual)>0);
+  const spend = drafted.reduce((s,p)=> s + (Number(p.actual)||0), 0);
+  const rec = drafted.reduce((s,p)=> s + (Number(p.base)||0), 0);
+  if (rec <= 0) return { text: "—", cls: "" };
+  const pct = ((spend - rec) / rec) * 100;
+  return { text: `${Math.round(Math.abs(pct))}% ${pct>0 ? "Greater" : "Less"} Than Rec.`, cls: pct>0 ? "bad" : "good" };
+}
+function renderPositionalValueTracking(){
+  const head = document.getElementById("pvHead");
+  const body = document.getElementById("pvBody");
+  const buckets = buildBuckets();
+
+  head.innerHTML = "";
+  const htr = document.createElement("tr");
+  htr.innerHTML = `<th>Position</th><th>Positional Value</th><th>Remaining Players Available</th>` + buckets.map(b => `<th>${b[0]}–${b[1]}</th>`).join("");
+  head.appendChild(htr);
+
+  body.innerHTML = "";
+  ["QB","RB","WR","TE"].forEach(pos => {
+    const remaining = state.players.filter(p => p.pos === pos && (!p.actual || Number(p.actual) === 0));
+    const valueInfo = formatPositionalValue(pos);
+    const tr = document.createElement("tr");
+    let html = `<td>${pos}</td><td class="value-pos ${valueInfo.cls}">${valueInfo.text}</td><td>${remaining.length}</td>`;
+    for (const [start,end] of buckets){
+      const count = remaining.filter(p => (Number(p.posRank)||0) >= start && (Number(p.posRank)||0) <= end).length;
+      let cls = "";
+      if (count === 0) cls = "bucket-0";
+      else if (count === 1) cls = "bucket-1";
+      html += `<td class="${cls}">${count}</td>`;
+    }
+    tr.innerHTML = html;
+    body.appendChild(tr);
+  });
+}
+
+/* ---------- Draft Log ---------- */
+function logDraftEvent(name, pos, actual){
+  const entry = { time: Date.now(), name, pos, actual: Number(actual)||0 };
+  state.log.push(entry);
+  state.log.sort((a,b)=> b.time - a.time);
+  save();
+  renderLog();
+}
+function renderLog(){
+  const ul = document.getElementById("draftLog");
+  ul.innerHTML = "";
+  if (!state.log.length){
+    ul.innerHTML = `<li class="muted">No picks yet.</li>`;
+    return;
+  }
+  state.log.forEach(item=>{
+    const li = document.createElement("li");
+    li.className = "log-item";
+    li.innerHTML = `<span class="who">${item.name} <span class="muted">(${item.pos})</span></span><span class="amt">${dollars(item.actual)}</span>`;
+    ul.appendChild(li);
+  });
+}
+
+/* ---------- Draft Board ---------- */
+function renderDraftBoard(){
+  const body = document.getElementById("boardBody");
+  const q = (document.getElementById("search").value || "").toLowerCase();
+  const fPos = document.getElementById("filterPos").value;
+  const fTier = document.getElementById("filterTier").value;
+
+  body.innerHTML = "";
+  state.players
+    .filter(p => !q || p.name.toLowerCase().includes(q))
+    .filter(p => !fPos || p.pos === fPos)
+    .filter(p => !fTier || String(p.tier) === fTier)
+    .sort((a,b) => a.rank - b.rank)
+    .forEach((p, idx) => {
+      const tr = document.createElement("tr");
+      tr.className = "pos-" + (p.pos || "UNK");
+      tr.innerHTML = `
+        <td>${p.name}</td>
+        <td><span class="badge">${p.pos}</span></td>
+        <td>${p.rank ?? ""}</td>
+        <td>${p.posRank ?? ""}</td>
+        <td>${p.tier ?? ""}</td>
+        <td class="right mono">${dollars(p.base)}</td>
+        <td class="right"><input type="number" min="0" step="1" data-i="${idx}" data-k="actual" value="${p.actual||0}"></td>
+        <td>
+          <select data-i="${idx}" data-k="myTeam">
+            <option value="false" ${p.myTeam ? "" : "selected"}>No</option>
+            <option value="true" ${p.myTeam ? "selected" : ""}>Yes</option>
+          </select>
+        </td>
+      `;
+      body.appendChild(tr);
+    });
+
+  body.querySelectorAll("input,select").forEach(el => el.addEventListener("change", onEdit));
+  computeKPIs();
+  renderLineup();
+  renderRecommendations();
+  renderPositionalValueTracking();
+}
+function onEdit(e){
+  const i = Number(e.target.dataset.i);
+  const k = e.target.dataset.k;
+  if (k === "actual"){
+    const prev = Number(state.players[i].actual)||0;
+    const v = Number(e.target.value)||0;
+    state.players[i].actual = v;
+    if ((prev === 0 && v > 0) || (prev !== v && v > 0)){
+      const p = state.players[i];
+      logDraftEvent(p.name, p.pos, v);
+    }
+  } else if (k === "myTeam"){
+    state.players[i].myTeam = (e.target.value === "true");
+  }
+  save();
+  computeKPIs();
+  renderLineup();
+  renderRecommendations();
+  renderPositionalValueTracking();
+}
+
+/* ---------- Export ---------- */
+document.getElementById("exportBtn").addEventListener("click", ()=>{
+  const blob = new Blob([JSON.stringify(state, null, 2)], {type: "application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = "auction_state.json"; a.click();
+  URL.revokeObjectURL(url);
+});
+
+/* ---------- Settings & Filters ---------- */
+["teamsCount","budgetPerTeam","yourTeamName","benchSlots"].forEach(id => {
+  const el = document.getElementById(id);
+  el.addEventListener("change", () => {
+    state.settings.teamsCount = Number(document.getElementById("teamsCount").value)||12;
+    state.settings.budgetPerTeam = Number(document.getElementById("budgetPerTeam").value)||200;
+    state.settings.yourTeamName = document.getElementById("yourTeamName").value || "You";
+    state.settings.benchSlots = Number(document.getElementById("benchSlots").value)||6;
+    save(); computeKPIs(); renderLineup(); renderRecommendations();
+  });
+});
+document.getElementById("search").addEventListener("input", renderDraftBoard);
+document.getElementById("filterPos").addEventListener("change", renderDraftBoard);
+document.getElementById("filterTier").addEventListener("change", renderDraftBoard);
+document.getElementById("clearFilters").addEventListener("click", () => {
+  document.getElementById("search").value = "";
+  document.getElementById("filterPos").value = "";
+  document.getElementById("filterTier").value = "";
+  renderDraftBoard();
+});
+
+/* ---------- Init ---------- */
+(function init(){
+  // If there's saved state, load it and keep players; else use embedded
+  load();
+  computeKPIs();
+  renderLineup();
+  renderRecommendations();
+  renderPositionalValueTracking();
+  renderDraftBoard();
+  renderLog();
+})();
+</script>
+</body>
+</html>
