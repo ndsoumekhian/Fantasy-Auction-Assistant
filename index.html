@@ -4,8 +4,6 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Fantasy Auction Assistant — Draft Board</title>
-<!-- SheetJS for in-browser Excel import -->
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
 <style>
   :root { --pad: 10px; --gap: 12px; --radius: 10px; }
   * { box-sizing: border-box; }
@@ -21,8 +19,6 @@
   .row { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
   label { font-size: 13px; color: #333; }
   input, select, button { padding: 8px; border-radius: 8px; border: 1px solid #cfd1d6; font-size: 14px; }
-  button { background: #111; color:#fff; cursor: pointer; }
-  button.secondary { background:#fff; color:#111; }
   input[type="number"] { width: 110px; }
   .kpi { display:grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap:12px; margin-top:8px; }
   .kpi .tile { background:#fafafa; border:1px solid #eee; border-radius:10px; padding:12px; }
@@ -34,16 +30,13 @@
   th, td { padding: 9px 10px; border-bottom: 1px solid #f0f0f3; white-space: nowrap; }
   th { position: sticky; top: 0; background: #f5f6fa; z-index: 1; text-align: left; }
   tbody tr:hover { filter: brightness(0.98); }
-
-  /* Position color tints */
-  .pos-QB { background: #ffe5e5; } /* red tint */
-  .pos-RB { background: #e6f0ff; } /* blue tint */
-  .pos-WR { background: #e8f7e8; } /* green tint */
-  .pos-TE { background: #fff1e0; } /* orange tint */
-  .pos-DST { background: #f1f1f1; }
-  .pos-K { background: #f1f1f1; }
+  /* Position tints */
+  .pos-QB { background: #ffe5e5; }  /* red tint */
+  .pos-RB { background: #e6f0ff; }  /* blue tint */
+  .pos-WR { background: #e8f7e8; }  /* green tint */
+  .pos-TE { background: #fff1e0; }  /* orange tint */
+  .pos-DST, .pos-K { background: #f1f1f1; }
   .badge { display:inline-block; padding:2px 8px; border-radius:999px; border:1px solid #ddd; font-size:12px; background:#fff; }
-
   /* Positional Value Tracking */
   .pv-grid { width: 100%; }
   .pv-grid th, .pv-grid td { text-align: right; }
@@ -51,23 +44,23 @@
   .pv-grid .value-pos { font-weight: 600; }
   .good { color: #0c7a43; }
   .bad { color: #b00020; }
-  .bucket-1 { background: #fff5c2; }  /* yellow */
-  .bucket-0 { background: #ffd6d6; }  /* red */
-
-  /* My lineup table */
+  .bucket-1 { background: #fff5c2; }  /* yellow at 1 left */
+  .bucket-0 { background: #ffd6d6; }  /* red at 0 left */
+  /* Lineup table */
   .lineup th { text-align:left; }
   .lineup td { white-space: normal; }
   .slot { display:flex; justify-content:space-between; gap:8px; }
   .slot .name { overflow:hidden; text-overflow:ellipsis; }
   .slot .price { font-weight:600; }
-
-  .hint { background:#fffbed; border:1px dashed #ffd38a; padding:10px; border-radius:8px; margin-top:10px; }
 </style>
 </head>
 <body>
 <header>
   <h1>Fantasy Auction Assistant — Draft Board</h1>
 </header>
+
+<!-- Keep this tag and paste your existing JSON inside it (or leave [] and use your current build pipeline). -->
+<script type="application/json" id="players-data">[]</script>
 
 <main class="grid">
   <!-- Top row: My Team (lineup) + League & Team -->
@@ -100,12 +93,6 @@
         <div class="tile"><div class="muted">Players on Your Team</div><div class="mono" id="yourPlayers">0</div></div>
         <div class="tile"><div class="muted">Your Max Bid</div><div class="mono" id="yourMaxBid">$0</div></div>
       </div>
-      <div class="row" style="margin-top:10px; gap:8px;">
-        <input id="importFile" type="file" accept=".xlsx,.xls,.json" style="display:none;">
-        <button id="importBtn" class="secondary">Import Rankings (Excel/JSON)</button>
-        <button id="exportBtn" class="secondary">Export State (JSON)</button>
-      </div>
-      <div class="hint">If no players appear, click <b>Import Rankings</b> and select your Excel file. Use sheet “<b>Rankings and Tiers</b>”. Expected columns: Player, Position, Overall, Pos Rank, Tier, Auction (Out of $200).</div>
     </div>
   </section>
 
@@ -121,7 +108,7 @@
     <div class="muted" style="margin-top:6px;">
       A player counts as <b>drafted</b> once an <b>Actual Auction Value</b> is entered (&gt; 0). Remaining = not yet drafted.
       Positional Value = (sum Actual − sum Recommended) / sum Recommended for drafted players at that position.
-      Buckets: 1–5, 6–10, …, 26–30, then 31–40, 41–50, 51–60, … with <span class="bucket-1">1 left</span> and <span class="bucket-0">0 left</span> highlighting.
+      Buckets: 1–5, 6–10, …, 26–30, then 31–40, 41–50, 51–60, … (cells turn <span class="bucket-1">yellow at 1</span> and <span class="bucket-0">red at 0</span>).
     </div>
   </section>
 
@@ -171,46 +158,151 @@
 </main>
 
 <script>
-const LS_KEY = "ffa_draft_board_v6"; // bump when changing data model
+/* ---------- Data & state ---------- */
+const raw = document.getElementById("players-data").textContent || "[]";
+let embeddedPlayers = [];
+try { embeddedPlayers = JSON.parse(raw); } catch(_) { embeddedPlayers = []; }
+
+const LS_KEY = "ffa_draft_board_v7";
 const state = {
   settings: {
     teamsCount: 12,
     budgetPerTeam: 200,
     yourTeamName: "You",
     benchSlots: 6,
-    // Lineup structure: 1 QB, 2 RB, 2 WR, 1 TE, 1 FLEX, 1 DST, 1 K
-    slots: { QB:1, RB:2, WR:2, TE:1, FLEX:1, DST:1, K:1 }
+    slots: { QB:1, RB:2, WR:2, TE:1, FLEX:1, DST:1, K:1 } // league structure
   },
-  players: [] // {name,pos,rank,posRank,tier,base,actual,myTeam}
+  players: []
 };
 
 function save(){ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
 function load(){
-  const raw = localStorage.getItem(LS_KEY);
-  if (!raw) return false;
-  try { Object.assign(state, JSON.parse(raw)); return true; } catch(e){ return false; }
+  const s = localStorage.getItem(LS_KEY);
+  if (!s) return false;
+  try { Object.assign(state, JSON.parse(s)); return true; } catch { return false; }
 }
 function dollars(x){ if (!isFinite(x)) return "$0"; return "$" + Math.round(x); }
-function normPos(s){
-  const p = String(s||"").trim().toUpperCase();
-  if (["DST","D/ST","DEF","D"].includes(p)) return "DST";
-  if (p==="PK") return "K";
-  if (["QB","RB","WR","TE","DST","K"].includes(p)) return p;
-  return p || "";
+
+/* ---------- KPIs ---------- */
+function totalSlotsPerTeam(){
+  const s = state.settings.slots, bench = Number(state.settings.benchSlots)||0;
+  return s.QB + s.RB + s.WR + s.TE + s.FLEX + s.DST + s.K + bench;
 }
 function computeKPIs(){
   const spent = state.players.reduce((sum,p)=> sum + (p.myTeam ? (Number(p.actual)||0) : 0), 0);
   const remaining = (Number(state.settings.budgetPerTeam)||200) - spent;
   const yourCount = state.players.filter(p=>p.myTeam && Number(p.actual)>0).length;
-  const totalSlots = state.settings.slots.QB + state.settings.slots.RB + state.settings.slots.WR + state.settings.slots.TE + state.settings.slots.FLEX + state.settings.slots.DST + state.settings.slots.K + (Number(state.settings.benchSlots)||6);
-  const openSlots = Math.max(0, totalSlots - yourCount);
+  const openSlots = Math.max(0, totalSlotsPerTeam() - yourCount);
   const maxBid = Math.max(0, remaining - Math.max(0, openSlots - 1));
   document.getElementById("yourRemaining").textContent = dollars(remaining);
   document.getElementById("yourPlayers").textContent = yourCount;
   document.getElementById("yourMaxBid").textContent = dollars(maxBid);
 }
 
-/* --------- Draft Board ---------- */
+/* ---------- Lineup auto-fill ---------- */
+function assignRoster(){
+  const s = state.settings.slots;
+  const L = { QB:[], RB:[], WR:[], TE:[], FLEX:[], DST:[], K:[], BENCH:[] };
+  const canFlex = pos => (pos==="RB"||pos==="WR"||pos==="TE");
+  const mine = state.players.filter(p=>p.myTeam && Number(p.actual)>0).sort((a,b)=> a.rank - b.rank);
+
+  for (const p of mine){
+    let placed = false;
+    // Primary slot
+    if (p.pos in L){
+      const need = s[p.pos] || 0;
+      if (L[p.pos].length < need){ L[p.pos].push(p); placed = true; }
+    }
+    // FLEX
+    if (!placed && canFlex(p.pos)){
+      const needF = s.FLEX || 0;
+      if (L.FLEX.length < needF){ L.FLEX.push(p); placed = true; }
+    }
+    // BENCH
+    if (!placed){
+      const benchNeed = Number(state.settings.benchSlots)||6;
+      if (L.BENCH.length < benchNeed){ L.BENCH.push(p); placed = true; }
+    }
+  }
+  return L;
+}
+function renderLineup(){
+  const body = document.getElementById("lineupBody");
+  const paidCell = document.getElementById("lineupPaid");
+  const s = state.settings.slots;
+  const L = assignRoster();
+  body.innerHTML = "";
+  let paid = 0;
+
+  function rowFor(slot, arr, maxCount){
+    for (let i=0; i<maxCount; i++){
+      const p = arr[i];
+      const name = p ? p.name : "<span class='muted'>—</span>";
+      const price = p ? dollars(Number(p.actual)||0) : "$0";
+      if (p) paid += Number(p.actual)||0;
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${slot}</td><td class="slot"><span class="name">${name}</span></td><td class="right price">${price}</td>`;
+      body.appendChild(tr);
+    }
+  }
+  rowFor("QB", L.QB, s.QB||0);
+  rowFor("RB", L.RB, s.RB||0);
+  rowFor("WR", L.WR, s.WR||0);
+  rowFor("TE", L.TE, s.TE||0);
+  rowFor("FLEX", L.FLEX, s.FLEX||0);
+  rowFor("DST", L.DST, s.DST||0);
+  rowFor("K", L.K, s.K||0);
+  rowFor("BENCH", L.BENCH, Number(state.settings.benchSlots)||6);
+
+  paidCell.textContent = dollars(paid);
+}
+
+/* ---------- Positional Value Tracking ---------- */
+function buildBuckets(){
+  const maxPosRank = state.players.reduce((m,p)=> Math.max(m, Number(p.posRank)||0), 0);
+  const buckets = [];
+  for (let start=1; start<=30; start+=5){ buckets.push([start, start+4]); }  // 1–5 ... 26–30
+  let s = 31;
+  while (s <= maxPosRank){ buckets.push([s, s+9]); s += 10; } // 31–40, 41–50, ...
+  return buckets;
+}
+function formatPositionalValue(pos){
+  const drafted = state.players.filter(p => p.pos === pos && Number(p.actual)>0);
+  const spend = drafted.reduce((s,p)=> s + (Number(p.actual)||0), 0);
+  const rec = drafted.reduce((s,p)=> s + (Number(p.base)||0), 0);
+  if (rec <= 0) return { text: "—", cls: "" };
+  const pct = ((spend - rec) / rec) * 100;
+  return { text: `${Math.round(Math.abs(pct))}% ${pct>0 ? "Greater" : "Less"} Than Rec.`, cls: pct>0 ? "bad" : "good" };
+}
+function renderPositionalValueTracking(){
+  const head = document.getElementById("pvHead");
+  const body = document.getElementById("pvBody");
+  const buckets = buildBuckets();
+
+  head.innerHTML = "";
+  const htr = document.createElement("tr");
+  htr.innerHTML = `<th>Position</th><th>Positional Value</th><th>Remaining Players Available</th>` + buckets.map(b => `<th>${b[0]}–${b[1]}</th>`).join("");
+  head.appendChild(htr);
+
+  body.innerHTML = "";
+  ["QB","RB","WR","TE"].forEach(pos => {
+    const remaining = state.players.filter(p => p.pos === pos && (!p.actual || Number(p.actual) === 0));
+    const valueInfo = formatPositionalValue(pos);
+    const tr = document.createElement("tr");
+    let html = `<td>${pos}</td><td class="value-pos ${valueInfo.cls}">${valueInfo.text}</td><td>${remaining.length}</td>`;
+    for (const [start,end] of buckets){
+      const count = remaining.filter(p => (Number(p.posRank)||0) >= start && (Number(p.posRank)||0) <= end).length;
+      let cls = "";
+      if (count === 0) cls = "bucket-0";
+      else if (count === 1) cls = "bucket-1";
+      html += `<td class="${cls}">${count}</td>`;
+    }
+    tr.innerHTML = html;
+    body.appendChild(tr);
+  });
+}
+
+/* ---------- Draft Board ---------- */
 function renderDraftBoard(){
   const body = document.getElementById("boardBody");
   const q = (document.getElementById("search").value || "").toLowerCase();
@@ -249,198 +341,15 @@ function renderDraftBoard(){
   renderLineup();
   renderPositionalValueTracking();
 }
-
 function onEdit(e){
   const i = Number(e.target.dataset.i);
   const k = e.target.dataset.k;
-  if (k === "actual"){
-    state.players[i].actual = Number(e.target.value)||0;
-  } else if (k === "myTeam"){
-    state.players[i].myTeam = (e.target.value === "true");
-  }
-  save();
-  computeKPIs();
-  renderLineup();
-  renderPositionalValueTracking();
+  if (k === "actual"){ state.players[i].actual = Number(e.target.value)||0; }
+  else if (k === "myTeam"){ state.players[i].myTeam = (e.target.value === "true"); }
+  save(); computeKPIs(); renderLineup(); renderPositionalValueTracking();
 }
 
-/* --------- Lineup auto-fill ---------- */
-function assignRoster(){
-  const s = state.settings.slots;
-  const lineup = { QB:[], RB:[], WR:[], TE:[], FLEX:[], DST:[], K:[], BENCH:[] };
-  const canFlex = pos => (pos==="RB"||pos==="WR"||pos==="TE");
-  const mine = state.players.filter(p=>p.myTeam && Number(p.actual)>0).sort((a,b)=> a.rank - b.rank);
-
-  for (const p of mine){
-    let placed = false;
-    if (p.pos in lineup){
-      const need = s[p.pos] || 0;
-      if (lineup[p.pos].length < need){
-        lineup[p.pos].push(p); placed = true;
-      }
-    }
-    if (!placed && canFlex(p.pos)){
-      const needF = s.FLEX || 0;
-      if (lineup.FLEX.length < needF){
-        lineup.FLEX.push(p); placed = true;
-      }
-    }
-    if (!placed){
-      const benchNeed = Number(state.settings.benchSlots)||6;
-      if (lineup.BENCH.length < benchNeed){
-        lineup.BENCH.push(p); placed = true;
-      }
-    }
-  }
-  return lineup;
-}
-
-function renderLineup(){
-  const body = document.getElementById("lineupBody");
-  const paidCell = document.getElementById("lineupPaid");
-  const s = state.settings.slots;
-  const L = assignRoster();
-  body.innerHTML = "";
-  let paid = 0;
-
-  function rowFor(slot, arr, maxCount){
-    for (let i=0; i<maxCount; i++){
-      const p = arr[i];
-      const name = p ? p.name : "<span class='muted'>—</span>";
-      const price = p ? dollars(Number(p.actual)||0) : "$0";
-      if (p) paid += Number(p.actual)||0;
-      const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${slot}</td><td class="slot"><span class="name">${name}</span></td><td class="right price">${price}</td>`;
-      body.appendChild(tr);
-    }
-  }
-
-  rowFor("QB", L.QB, s.QB||0);
-  rowFor("RB", L.RB, s.RB||0);
-  rowFor("WR", L.WR, s.WR||0);
-  rowFor("TE", L.TE, s.TE||0);
-  rowFor("FLEX", L.FLEX, s.FLEX||0);
-  rowFor("DST", L.DST, s.DST||0);
-  rowFor("K", L.K, s.K||0);
-  rowFor("BENCH", L.BENCH, Number(state.settings.benchSlots)||6);
-
-  paidCell.textContent = dollars(paid);
-}
-
-/* --------- Positional Value Tracking ---------- */
-function buildBuckets(){
-  const maxPosRank = state.players.reduce((m,p)=> Math.max(m, Number(p.posRank)||0), 0);
-  const buckets = [];
-  for (let start=1; start<=30; start+=5){ buckets.push([start, start+4]); }  // 1-5,6-10,...,26-30
-  let start = 31;
-  while (start <= maxPosRank){ buckets.push([start, start+9]); start += 10; } // 31-40, 41-50, ...
-  return buckets;
-}
-function formatPositionalValue(pos){
-  const drafted = state.players.filter(p => p.pos === pos && Number(p.actual)>0);
-  const spend = drafted.reduce((s,p)=> s + (Number(p.actual)||0), 0);
-  const rec = drafted.reduce((s,p)=> s + (Number(p.base)||0), 0);
-  if (rec <= 0) return { text: "—", cls: "" };
-  const diff = spend - rec;
-  const pct = (diff / rec) * 100;
-  const rounded = Math.round(Math.abs(pct));
-  const greater = pct > 0;
-  return { text: `${rounded}% ${greater ? "Greater" : "Less"} Than Rec.`, cls: greater ? "bad" : "good" };
-}
-function renderPositionalValueTracking(){
-  const head = document.getElementById("pvHead");
-  const body = document.getElementById("pvBody");
-  const buckets = buildBuckets();
-
-  head.innerHTML = "";
-  const htr = document.createElement("tr");
-  htr.innerHTML = `<th>Position</th><th>Positional Value</th><th>Remaining Players Available</th>` + buckets.map(b => `<th>${b[0]}–${b[1]}</th>`).join("");
-  head.appendChild(htr);
-
-  body.innerHTML = "";
-  ["QB","RB","WR","TE"].forEach(pos => {
-    const remaining = state.players.filter(p => p.pos === pos && (!p.actual || Number(p.actual) === 0));
-    const valueInfo = formatPositionalValue(pos);
-    const tr = document.createElement("tr");
-    let html = `<td>${pos}</td><td class="value-pos ${valueInfo.cls}">${valueInfo.text}</td><td>${remaining.length}</td>`;
-    for (const [start,end] of buckets){
-      const count = remaining.filter(p => (Number(p.posRank)||0) >= start && (Number(p.posRank)||0) <= end).length;
-      let cls = "";
-      if (count === 0) cls = "bucket-0";
-      else if (count === 1) cls = "bucket-1";
-      html += `<td class="${cls}">${count}</td>`;
-    }
-    tr.innerHTML = html;
-    body.appendChild(tr);
-  });
-}
-
-/* --------- Import/Export ---------- */
-function tryImportJSON(text){
-  const data = JSON.parse(text);
-  if (data.players && Array.isArray(data.players)){
-    state.players = data.players;
-  } else if (Array.isArray(data)){ // plain players array
-    state.players = data;
-  } else {
-    throw new Error("JSON format not recognized.");
-  }
-}
-function rowsFromSheet(sheet){
-  return XLSX.utils.sheet_to_json(sheet, { defval: "" });
-}
-function toPlayersFromRows(rows){
-  // Map columns: Player, Position, Overall, Pos Rank, Tier, Auction (Out of $200)
-  return rows.map(r => ({
-    name: String(r["Player"] ?? r["Name"] ?? "").trim(),
-    pos: normPos(r["Position"]),
-    rank: Number(r["Overall"] ?? r["Rank"] ?? 0) || 0,
-    posRank: Number(r["Pos Rank"] ?? r["Position Rank"] ?? 0) || 0,
-    tier: String(r["Tier"] ?? "").trim(),
-    base: Number(r["Auction (Out of $200)"] ?? r["Auction"] ?? 0) || 0,
-    actual: 0,
-    myTeam: false
-  })).filter(p => p.name && p.pos);
-}
-document.getElementById("importBtn").addEventListener("click", ()=> document.getElementById("importFile").click());
-document.getElementById("importFile").addEventListener("change", (evt)=>{
-  const file = evt.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (e)=>{
-    try {
-      if (file.name.toLowerCase().endsWith(".json")){
-        tryImportJSON(e.target.result);
-      } else {
-        const wb = XLSX.read(new Uint8Array(e.target.result), {type:"array"});
-        // Prefer "Rankings and Tiers" sheet; fallback to first sheet
-        const sheet = wb.Sheets["Rankings and Tiers"] || wb.Sheets[wb.SheetNames[0]];
-        const rows = rowsFromSheet(sheet);
-        state.players = toPlayersFromRows(rows);
-      }
-      save();
-      computeKPIs();
-      renderLineup();
-      renderPositionalValueTracking();
-      renderDraftBoard();
-    } catch(err){
-      alert("Import failed: " + err.message);
-    } finally {
-      evt.target.value = "";
-    }
-  };
-  if (file.name.toLowerCase().endsWith(".json")) reader.readAsText(file);
-  else reader.readAsArrayBuffer(file);
-});
-document.getElementById("exportBtn").addEventListener("click", ()=>{
-  const blob = new Blob([JSON.stringify(state, null, 2)], {type: "application/json"});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.download = "auction_state.json"; a.click();
-  URL.revokeObjectURL(url);
-});
-
-/* --------- Settings & Filters ---------- */
+/* ---------- Settings & Filters ---------- */
 ["teamsCount","budgetPerTeam","yourTeamName","benchSlots"].forEach(id => {
   const el = document.getElementById(id);
   el.addEventListener("change", () => {
@@ -461,9 +370,10 @@ document.getElementById("clearFilters").addEventListener("click", () => {
   renderDraftBoard();
 });
 
-/* --------- Init ---------- */
+/* ---------- Init ---------- */
 (function init(){
-  const ok = load(); // load persisted state if any
+  const ok = load();
+  if (!ok){ state.players = embeddedPlayers; }
   document.getElementById("teamsCount").value = state.settings.teamsCount;
   document.getElementById("budgetPerTeam").value = state.settings.budgetPerTeam;
   document.getElementById("yourTeamName").value = state.settings.yourTeamName;
