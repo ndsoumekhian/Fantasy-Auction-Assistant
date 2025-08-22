@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Fantasy Auction Assistant — Draft Board</title>
-<!-- SheetJS for in-browser Excel import -->
+<!-- Excel import (optional): you can still import a new sheet mid-draft -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
 <style>
   :root { --pad: 10px; --gap: 12px; --radius: 10px; }
@@ -14,7 +14,7 @@
   header h1 { margin: 0; font-size: 20px; }
   main { padding: 18px var(--pad); max-width: 1400px; margin: 0 auto; }
 
-  /* Three-column master layout: col1, col2 = main; col3 = draft log sidebar */
+  /* 3-column layout: left (team/filters), middle (league/recs/board), right (log) */
   .main-grid { display: grid; gap: var(--gap); grid-template-columns: 1.2fr 1.2fr 0.8fr; align-items: start; }
   .span-2 { grid-column: 1 / span 2; }
   .col-1 { grid-column: 1; }
@@ -50,11 +50,11 @@
   th { position: sticky; top: 0; background: #f5f6fa; z-index: 1; text-align: left; }
   tbody tr:hover { filter: brightness(0.98); }
 
-  /* Position color tints */
-  .pos-QB { background: #ffe5e5; } /* red tint */
-  .pos-RB { background: #e6f0ff; } /* blue tint */
-  .pos-WR { background: #e8f7e8; } /* green tint */
-  .pos-TE { background: #fff1e0; } /* orange tint */
+  /* Position tints */
+  .pos-QB { background: #ffe5e5; } /* red */
+  .pos-RB { background: #e6f0ff; } /* blue */
+  .pos-WR { background: #e8f7e8; } /* green */
+  .pos-TE { background: #fff1e0; } /* orange */
   .pos-DST, .pos-K { background: #f1f1f1; }
   .badge { display:inline-block; padding:2px 8px; border-radius:999px; border:1px solid #ddd; font-size:12px; background:#fff; }
 
@@ -65,22 +65,21 @@
   .pv-grid .value-pos { font-weight: 600; }
   .good { color: #0c7a43; }
   .bad { color: #b00020; }
-  .bucket-1 { background: #fff5c2; }  /* yellow when 1 left */
-  .bucket-0 { background: #ffd6d6; }  /* red when 0 left */
+  .bucket-1 { background: #fff5c2; }  /* 1 left */
+  .bucket-0 { background: #ffd6d6; }  /* 0 left */
 
-  /* My lineup table */
+  /* Lineup table */
   .lineup th { text-align:left; }
   .lineup td { white-space: normal; }
   .slot { display:flex; justify-content:space-between; gap:8px; }
   .slot .name { overflow:hidden; text-overflow:ellipsis; }
   .slot .price { font-weight:600; }
 
-  /* Draft Log styles */
+  /* Draft Log */
   .log-list { list-style: none; padding: 0; margin: 0; }
   .log-item { display:flex; justify-content:space-between; gap:10px; padding:6px 0; border-bottom:1px solid #f0f0f3; }
   .log-item .who { font-weight:600; }
   .log-item .amt { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-
 </style>
 </head>
 <body>
@@ -88,11 +87,18 @@
   <h1>Fantasy Auction Assistant — Draft Board</h1>
 </header>
 
-<!-- Optional: embed players JSON here. If empty [], use Import Rankings. -->
+<!-- Paste the JSON from block (2) into the [{"name":"Ja'Marr Chase","pos":"WR","rank":1,"posRank":1,"tier":"1","base":63.0,"actual":0,"myTeam":false},{"name":"Bijan Robinson","pos":"RB","rank":2,"posRank":1,"tier":"1","base":62.0,"actual":0,"myTeam":false},{"name":"Jahmyr Gibbs","pos":"RB","rank":3,"posRank":2,"tier":"1","base":61.0,"actual":0,"myTeam":false},{"name":"Saquon Barkley","pos":"RB","rank":4,"posRank":3,"tier":"1","base":57.0,"actual":0,"myTeam":false},{"name":"CeeDee Lamb","pos":"WR","rank":5,"posRank":2,"tier":"1","base":60.0,"actual":0,"myTeam":false},{"name":"Christian McCaffrey","pos":"RB","rank":6,"posRank":4,"tier":"1","base":69.0,"actual":0,"myTeam":false},{"name":"Justin Jefferson","pos":"WR","rank":7,"posRank":3,"tier":"1","base":57.0,"actual":0,"myTeam":false},{"name":"Breece Hall","pos":"RB","rank":8,"posRank":5,"tier":"1","base":52.0,"actual":0,"myTeam":false},{"name":"Amon-Ra St. Brown","pos":"WR","rank":9,"posRank":4,"tier":"1","base":52.0,"actual":0,"myTeam":false},{"name":"Tyreek Hill","pos":"WR","rank":10,"posRank":5,"tier":"1","base":52.0,"actual":0,"myTeam":false}
+,
+{"name":"A.J. Brown","pos":"WR","rank":11,"posRank":6,"tier":"1","base":51.0,"actual":0,"myTeam":false},{"name":"Jalen Hurts","pos":"QB","rank":12,"posRank":1,"tier":"1","base":36.0,"actual":0,"myTeam":false},{"name":"C.J. Stroud","pos":"QB","rank":13,"posRank":2,"tier":"1","base":23.0,"actual":0,"myTeam":false},{"name":"Jalen Waddle","pos":"WR","rank":14,"posRank":7,"tier":"1","base":41.0,"actual":0,"myTeam":false},{"name":"Garrett Wilson","pos":"WR","rank":15,"posRank":8,"tier":"1","base":41.0,"actual":0,"myTeam":false},{"name":"Jahaan Dotson","pos":"WR","rank":16,"posRank":9,"tier":"1","base":4.0,"actual":0,"myTeam":false},{"name":"Derrick Henry","pos":"RB","rank":17,"posRank":6,"tier":"1","base":42.0,"actual":0,"myTeam":false},{"name":"Aidan O'Connell","pos":"QB","rank":18,"posRank":3,"tier":"1","base":1.0,"actual":0,"myTeam":false},{"name":"De'Von Achane","pos":"RB","rank":19,"posRank":7,"tier":"1","base":38.0,"actual":0,"myTeam":false},{"name":"Sam LaPorta","pos":"TE","rank":20,"posRank":1,"tier":"1","base":22.0,"actual":0,"myTeam":false}
+,
+{"name":"Deebo Samuel","pos":"WR","rank":21,"posRank":10,"tier":"1","base":35.0,"actual":0,"myTeam":false},{"name":"Josh Allen","pos":"QB","rank":22,"posRank":4,"tier":"1","base":27.0,"actual":0,"myTeam":false},{"name":"Kyren Williams","pos":"RB","rank":23,"posRank":8,"tier":"1","base":41.0,"actual":0,"myTeam":false},{"name":"Almond-Ra Snack Brown","pos":"WR","rank":24,"posRank":11,"tier":"1","base":1.0,"actual":0,"myTeam":false},{"name":"Nico Collins","pos":"WR","rank":25,"posRank":12,"tier":"1","base":32.0,"actual":0,"myTeam":false},{"name":"Puka Nacua","pos":"WR","rank":26,"posRank":13,"tier":"1","base":32.0,"actual":0,"myTeam":false},{"name":"Amon-Ra St. Beige","pos":"WR","rank":27,"posRank":14,"tier":"1","base":1.0,"actual":0,"myTeam":false},{"name":"Michael Pittman Jr.","pos":"WR","rank":28,"posRank":15,"tier":"1","base":30.0,"actual":0,"myTeam":false},{"name":"Travis Kelce","pos":"TE","rank":29,"posRank":2,"tier":"1","base":26.0,"actual":0,"myTeam":false},{"name":"Drake London","pos":"WR","rank":30,"posRank":16,"tier":"1","base":28.0,"actual":0,"myTeam":false}
+,
+{"name":"Davante Adams","pos":"WR","rank":31,"posRank":17,"tier":"1","base":32.0,"actual":0,"myTeam":false},{"name":"Kenneth Walker III","pos":"RB","rank":32,"posRank":9,"tier":"1","base":29.0,"actual":0,"myTeam":false},{"name":"Isiah Pacheco","pos":"RB","rank":33,"posRank":10,"tier":"1","base":29.0,"actual":0,"myTeam":false},{"name":"Joe Mixon","pos":"RB","rank":34,"posRank":11,"tier":"1","base":29.0,"actual":0,"myTeam":false},{"name":"Anthony Richardson","pos":"QB","rank":35,"posRank":5,"tier":"1","base":21.0,"actual":0,"myTeam":false},{"name":"Lamb, CeeDee","pos":"WR","rank":36,"posRank":18,"tier":"1","base":1.0,"actual":0,"myTeam":false},{"name":"Stefon Diggs","pos":"WR","rank":37,"posRank":19,"tier":"1","base":27.0,"actual":0,"myTeam":false},{"name":"DeVonta Smith","pos":"WR","rank":38,"posRank":20,"tier":"1","base":27.0,"actual":0,"myTeam":false},{"name":"Rachaad White","pos":"RB","rank":39,"posRank":12,"tier":"1","base":26.0,"actual":0,"myTeam":false},{"name":"James Cook","pos":"RB","rank":40,"posRank":13,"tier":"1","base":26.0,"actual":0,"myTeam":false}
+...] below -->
 <script type="application/json" id="players-data">[]</script>
 
 <main class="main-grid">
-  <!-- Row 1, Col 1: My Team -->
+  <!-- My Team -->
   <section class="card col-1 row-1">
     <h2>My Team (Lineup)</h2>
     <div class="table-wrap">
@@ -108,7 +114,7 @@
     </div>
   </section>
 
-  <!-- Row 1, Col 2: League & Team (compact) + Recommended Players -->
+  <!-- League & Team (compact) + Recommended Players -->
   <section class="card col-2 row-1 compact">
     <h2>League & Team</h2>
     <div class="row">
@@ -140,13 +146,13 @@
     <div class="muted" style="margin-top:6px;">Shows best remaining players for your <b>starting</b> needs (and FLEX if open).</div>
   </section>
 
-  <!-- Row 1..3, Col 3: Draft Log (sidebar) -->
+  <!-- Draft Log (right sidebar) -->
   <section class="card col-3 row-1" style="grid-row: 1 / span 3;">
     <h2>Draft Log</h2>
     <ul id="draftLog" class="log-list"></ul>
   </section>
 
-  <!-- Row 2, Span 2: Positional Value Tracking -->
+  <!-- Positional Value Tracking -->
   <section class="card span-2 row-2">
     <h2>Positional Value Tracking</h2>
     <div class="table-wrap">
@@ -162,7 +168,7 @@
     </div>
   </section>
 
-  <!-- Row 3: Filters (left) + Draft Board (right) -->
+  <!-- Filters + Draft Board -->
   <section class="card col-1 row-3">
     <h2>Filters</h2>
     <div class="controls">
@@ -211,40 +217,26 @@ const raw = document.getElementById("players-data").textContent || "[]";
 let embeddedPlayers = [];
 try { embeddedPlayers = JSON.parse(raw); } catch(_) { embeddedPlayers = []; }
 
-const LS_KEY = "ffa_draft_board_v9";
+const LS_KEY = "ffa_draft_board_v10";
 const state = {
   settings: {
     teamsCount: 12,
     budgetPerTeam: 200,
     yourTeamName: "You",
     benchSlots: 6,
-    // Lineup: 1 QB, 2 RB, 2 WR, 1 TE, 1 FLEX, 1 DST, 1 K
     slots: { QB:1, RB:2, WR:2, TE:1, FLEX:1, DST:1, K:1 }
   },
-  players: [], // {name,pos,rank,posRank,tier,base,actual,myTeam}
-  log: []      // [{time, name, pos, actual}]
+  players: [],
+  log: []
 };
 
 function save(){ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
-function load(){
-  const s = localStorage.getItem(LS_KEY);
-  if (!s) return false;
-  try { Object.assign(state, JSON.parse(s)); return true; } catch { return false; }
-}
+function load(){ const s = localStorage.getItem(LS_KEY); if (!s) return false; try { Object.assign(state, JSON.parse(s)); return true; } catch { return false; } }
 function dollars(x){ if (!isFinite(x)) return "$0"; return "$" + Math.round(x); }
-function normPos(s){
-  const p = String(s||"").trim().toUpperCase();
-  if (["DST","D/ST","DEF","D"].includes(p)) return "DST";
-  if (p==="PK") return "K";
-  if (["QB","RB","WR","TE","DST","K"].includes(p)) return p;
-  return p || "";
-}
+function normPos(s){ const p = String(s||"").trim().toUpperCase(); if (["DST","D/ST","DEF","D"].includes(p)) return "DST"; if (p==="PK") return "K"; if (["QB","RB","WR","TE","DST","K"].includes(p)) return p; return p || ""; }
 
 /* ---------- KPIs ---------- */
-function totalSlotsPerTeam(){
-  const s = state.settings.slots, bench = Number(state.settings.benchSlots)||0;
-  return s.QB + s.RB + s.WR + s.TE + s.FLEX + s.DST + s.K + bench;
-}
+function totalSlotsPerTeam(){ const s = state.settings.slots, bench = Number(state.settings.benchSlots)||0; return s.QB + s.RB + s.WR + s.TE + s.FLEX + s.DST + s.K + bench; }
 function computeKPIs(){
   const spent = state.players.reduce((sum,p)=> sum + (p.myTeam ? (Number(p.actual)||0) : 0), 0);
   const remaining = (Number(state.settings.budgetPerTeam)||200) - spent;
@@ -265,7 +257,7 @@ function assignRoster(){
 
   for (const p of mine){
     let placed = false;
-    // Primary slot
+    // Primary
     if (p.pos in L){
       const need = s[p.pos] || 0;
       if (L[p.pos].length < need){ L[p.pos].push(p); placed = true; }
@@ -318,7 +310,7 @@ function renderLineup(){
 /* ---------- Recommended Players Available ---------- */
 function computeNeeds(){
   const s = state.settings.slots;
-  const L = assignRoster(); // current filled based on drafted + myTeam
+  const L = assignRoster();
   const needs = {
     QB: Math.max(0, (s.QB||0) - L.QB.length),
     RB: Math.max(0, (s.RB||0) - L.RB.length),
@@ -336,7 +328,7 @@ function renderRecommendations(){
   const needs = computeNeeds();
   const remaining = state.players.filter(p => Number(p.actual) === 0); // not drafted
 
-  // Order of priority: fill starters first, then FLEX
+  // Prioritize filling starters first, then FLEX
   const order = ["QB","RB","WR","TE","DST","K","FLEX"];
   const rows = [];
   for (const pos of order){
@@ -481,12 +473,10 @@ function onEdit(e){
     const prev = Number(state.players[i].actual)||0;
     const v = Number(e.target.value)||0;
     state.players[i].actual = v;
-    // Log event when transitioning from 0 -> >0, or update if price changed
     if ((prev === 0 && v > 0) || (prev !== v && v > 0)){
       const p = state.players[i];
       logDraftEvent(p.name, p.pos, v);
     }
-    // If changed to 0, leave log as historical
   } else if (k === "myTeam"){
     state.players[i].myTeam = (e.target.value === "true");
   }
