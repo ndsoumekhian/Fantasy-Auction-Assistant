@@ -12,23 +12,38 @@
   body { font-family: -apple-system, system-ui, Segoe UI, Roboto, Arial, sans-serif; margin: 0; color: #111; background: #f7f7f9; }
   header { padding: 18px var(--pad); background: #111; color: #fff; }
   header h1 { margin: 0; font-size: 20px; }
-  main { padding: 18px var(--pad); max-width: 1280px; margin: 0 auto; }
-  .grid { display: grid; gap: var(--gap); }
-  .grid-2 { grid-template-columns: 1fr 1fr; }
-  .draft-layout { display:grid; grid-template-columns: 0.7fr 1.3fr; gap: var(--gap); } /* narrower board */
-  .card { background: #fff; border: 1px solid #e6e6ee; border-radius: var(--radius); padding: 16px; }
-  .card h2 { margin: 0 0 10px 0; font-size: 16px; }
+  main { padding: 18px var(--pad); max-width: 1400px; margin: 0 auto; }
+
+  /* Three-column master layout: col1, col2 = main; col3 = draft log sidebar */
+  .main-grid { display: grid; gap: var(--gap); grid-template-columns: 1.2fr 1.2fr 0.8fr; align-items: start; }
+  .span-2 { grid-column: 1 / span 2; }
+  .col-1 { grid-column: 1; }
+  .col-2 { grid-column: 2; }
+  .col-3 { grid-column: 3; }
+  .row-1 { grid-row: 1; }
+  .row-2 { grid-row: 2; }
+  .row-3 { grid-row: 3; }
+
+  .card { background: #fff; border: 1px solid #e6e6ee; border-radius: var(--radius); padding: 14px; }
+  .card h2 { margin: 0 0 8px 0; font-size: 16px; }
+
+  .compact * { font-size: 13px; }
+  .compact input, .compact select, .compact button { padding: 6px; border-radius: 8px; }
+  .compact .row { gap: 8px 10px; }
+
   .row { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
   label { font-size: 13px; color: #333; }
   input, select, button { padding: 8px; border-radius: 8px; border: 1px solid #cfd1d6; font-size: 14px; }
   button { background: #111; color:#fff; cursor: pointer; }
   button.secondary { background:#fff; color:#111; }
   input[type="number"] { width: 110px; }
-  .kpi { display:grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap:12px; margin-top:8px; }
-  .kpi .tile { background:#fafafa; border:1px solid #eee; border-radius:10px; padding:12px; }
+
+  .kpi { display:grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap:10px; margin-top:6px; }
+  .kpi .tile { background:#fafafa; border:1px solid #eee; border-radius:10px; padding:10px; }
   .muted { color:#666; font-size:12px; }
   .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
   .right { text-align:right; }
+
   .table-wrap { overflow:auto; border:1px solid #e6e6ee; border-radius: var(--radius); }
   table { width:100%; border-collapse: collapse; font-size:13px; }
   th, td { padding: 9px 10px; border-bottom: 1px solid #f0f0f3; white-space: nowrap; }
@@ -60,7 +75,12 @@
   .slot .name { overflow:hidden; text-overflow:ellipsis; }
   .slot .price { font-weight:600; }
 
-  .hint { background:#fffbed; border:1px dashed #ffd38a; padding:10px; border-radius:8px; margin-top:10px; }
+  /* Draft Log styles */
+  .log-list { list-style: none; padding: 0; margin: 0; }
+  .log-item { display:flex; justify-content:space-between; gap:10px; padding:6px 0; border-bottom:1px solid #f0f0f3; }
+  .log-item .who { font-weight:600; }
+  .log-item .amt { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
 </style>
 </head>
 <body>
@@ -68,51 +88,66 @@
   <h1>Fantasy Auction Assistant — Draft Board</h1>
 </header>
 
-<!-- Embed players as JSON (optional) -->
+<!-- Optional: embed players JSON here. If empty [], use Import Rankings. -->
 <script type="application/json" id="players-data">[]</script>
 
-<main class="grid">
-  <!-- Top row: My Team (lineup) + League & Team -->
-  <section class="grid grid-2">
-    <div class="card">
-      <h2>My Team (Lineup)</h2>
-      <div class="table-wrap">
-        <table class="lineup">
-          <thead>
-            <tr><th>Slot</th><th>Player</th><th class="right">Paid</th></tr>
-          </thead>
-          <tbody id="lineupBody"></tbody>
-          <tfoot>
-            <tr><th colspan="2" class="right">Total Paid</th><th class="right" id="lineupPaid">$0</th></tr>
-          </tfoot>
-        </table>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>League & Team</h2>
-      <div class="row">
-        <label>Teams <input id="teamsCount" type="number" min="2" value="12"></label>
-        <label>Budget / Team <input id="budgetPerTeam" type="number" min="1" value="200"></label>
-        <label>Your Team Name <input id="yourTeamName" type="text" value="You"></label>
-        <label>Bench Slots <input id="benchSlots" type="number" min="0" value="6"></label>
-      </div>
-      <div class="kpi">
-        <div class="tile"><div class="muted">Your Remaining Budget</div><div class="mono" id="yourRemaining">$0</div></div>
-        <div class="tile"><div class="muted">Players on Your Team</div><div class="mono" id="yourPlayers">0</div></div>
-        <div class="tile"><div class="muted">Your Max Bid</div><div class="mono" id="yourMaxBid">$0</div></div>
-      </div>
-      <div class="row" style="margin-top:10px; gap:8px;">
-        <input id="importFile" type="file" accept=".xlsx,.xls,.json" style="display:none;">
-        <button id="importBtn" class="secondary">Import Rankings (Excel/JSON)</button>
-        <button id="exportBtn" class="secondary">Export State (JSON)</button>
-      </div>
-      <div class="hint">Use <b>Import Rankings</b> to load your Excel sheet (sheet name “<b>Rankings and Tiers</b>”). Columns expected: Player, Position, Overall, Pos Rank, Tier, Auction (Out of $200).</div>
+<main class="main-grid">
+  <!-- Row 1, Col 1: My Team -->
+  <section class="card col-1 row-1">
+    <h2>My Team (Lineup)</h2>
+    <div class="table-wrap">
+      <table class="lineup">
+        <thead>
+          <tr><th>Slot</th><th>Player</th><th class="right">Paid</th></tr>
+        </thead>
+        <tbody id="lineupBody"></tbody>
+        <tfoot>
+          <tr><th colspan="2" class="right">Total Paid</th><th class="right" id="lineupPaid">$0</th></tr>
+        </tfoot>
+      </table>
     </div>
   </section>
 
-  <!-- Positional Value Tracking (full width) -->
-  <section class="card">
+  <!-- Row 1, Col 2: League & Team (compact) + Recommended Players -->
+  <section class="card col-2 row-1 compact">
+    <h2>League & Team</h2>
+    <div class="row">
+      <label>Teams <input id="teamsCount" type="number" min="2" value="12"></label>
+      <label>Budget <input id="budgetPerTeam" type="number" min="1" value="200"></label>
+      <label>Your Team <input id="yourTeamName" type="text" value="You"></label>
+      <label>Bench <input id="benchSlots" type="number" min="0" value="6"></label>
+    </div>
+    <div class="kpi">
+      <div class="tile"><div class="muted">Remaining</div><div class="mono" id="yourRemaining">$0</div></div>
+      <div class="tile"><div class="muted">Rostered</div><div class="mono" id="yourPlayers">0</div></div>
+      <div class="tile"><div class="muted">Max Bid</div><div class="mono" id="yourMaxBid">$0</div></div>
+    </div>
+    <div class="row" style="margin-top:8px; gap:8px;">
+      <input id="importFile" type="file" accept=".xlsx,.xls,.json" style="display:none;">
+      <button id="importBtn" class="secondary">Import Rankings (Excel/JSON)</button>
+      <button id="exportBtn" class="secondary">Export State (JSON)</button>
+    </div>
+
+    <h2 style="margin-top:12px;">Recommended Players Available</h2>
+    <div class="table-wrap">
+      <table id="recsTable">
+        <thead>
+          <tr><th>Pos</th><th>Player</th><th class="right">Rec. $</th><th class="right">Rank</th></tr>
+        </thead>
+        <tbody id="recsBody"></tbody>
+      </table>
+    </div>
+    <div class="muted" style="margin-top:6px;">Shows best remaining players for your <b>starting</b> needs (and FLEX if open).</div>
+  </section>
+
+  <!-- Row 1..3, Col 3: Draft Log (sidebar) -->
+  <section class="card col-3 row-1" style="grid-row: 1 / span 3;">
+    <h2>Draft Log</h2>
+    <ul id="draftLog" class="log-list"></ul>
+  </section>
+
+  <!-- Row 2, Span 2: Positional Value Tracking -->
+  <section class="card span-2 row-2">
     <h2>Positional Value Tracking</h2>
     <div class="table-wrap">
       <table class="pv-grid" id="pvTable">
@@ -121,53 +156,51 @@
       </table>
     </div>
     <div class="muted" style="margin-top:6px;">
-      A player counts as <b>drafted</b> once an <b>Actual Auction Value</b> is entered (&gt; 0). Remaining = not yet drafted.
+      A player counts as <b>drafted</b> when <b>Actual Auction Value</b> &gt; 0. Remaining = not yet drafted.
       Positional Value = (sum Actual − sum Recommended) / sum Recommended for drafted players at that position.
-      Buckets: 1–5, 6–10, …, 26–30, then 31–40, 41–50, 51–60, … (<span class="bucket-1">yellow at 1</span>, <span class="bucket-0">red at 0</span>).
+      Buckets: 1–5, 6–10, 11–15, 16–20, 21–25, 26–30, 31–40, 41–50 (<span class="bucket-1">yellow at 1</span>, <span class="bucket-0">red at 0</span>).
     </div>
   </section>
 
-  <!-- Bottom: small Filters (left) + narrower Draft Board (right) -->
-  <section class="draft-layout">
-    <div class="card">
-      <h2>Filters</h2>
-      <div class="controls">
-        <label>Search <input id="search" type="text" placeholder="Search player..."></label>
-        <label>Position
-          <select id="filterPos">
-            <option value="">All</option>
-            <option>QB</option><option>RB</option><option>WR</option><option>TE</option><option>DST</option><option>K</option>
-          </select>
-        </label>
-        <label>Tier
-          <select id="filterTier">
-            <option value="">All</option>
-            <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option>
-          </select>
-        </label>
-        <button id="clearFilters">Clear</button>
-      </div>
+  <!-- Row 3: Filters (left) + Draft Board (right) -->
+  <section class="card col-1 row-3">
+    <h2>Filters</h2>
+    <div class="controls">
+      <label>Search <input id="search" type="text" placeholder="Search player..."></label>
+      <label>Position
+        <select id="filterPos">
+          <option value="">All</option>
+          <option>QB</option><option>RB</option><option>WR</option><option>TE</option><option>DST</option><option>K</option>
+        </select>
+      </label>
+      <label>Tier
+        <select id="filterTier">
+          <option value="">All</option>
+          <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option>
+        </select>
+      </label>
+      <button id="clearFilters">Clear</button>
     </div>
+  </section>
 
-    <div class="card">
-      <h2>Draft Board</h2>
-      <div class="table-wrap">
-        <table id="board">
-          <thead>
-            <tr>
-              <th>Player Name</th>
-              <th>Position</th>
-              <th>Rank</th>
-              <th>Position Rank</th>
-              <th>Tier</th>
-              <th class="right">Recommended Auction Value</th>
-              <th class="right">Actual Auction Value</th>
-              <th>My Team?</th>
-            </tr>
-          </thead>
-          <tbody id="boardBody"></tbody>
-        </table>
-      </div>
+  <section class="card col-2 row-3">
+    <h2>Draft Board</h2>
+    <div class="table-wrap">
+      <table id="board">
+        <thead>
+          <tr>
+            <th>Player Name</th>
+            <th>Position</th>
+            <th>Rank</th>
+            <th>Position Rank</th>
+            <th>Tier</th>
+            <th class="right">Recommended Auction Value</th>
+            <th class="right">Actual Auction Value</th>
+            <th>My Team?</th>
+          </tr>
+        </thead>
+        <tbody id="boardBody"></tbody>
+      </table>
     </div>
   </section>
 </main>
@@ -178,7 +211,7 @@ const raw = document.getElementById("players-data").textContent || "[]";
 let embeddedPlayers = [];
 try { embeddedPlayers = JSON.parse(raw); } catch(_) { embeddedPlayers = []; }
 
-const LS_KEY = "ffa_draft_board_v8";
+const LS_KEY = "ffa_draft_board_v9";
 const state = {
   settings: {
     teamsCount: 12,
@@ -188,7 +221,8 @@ const state = {
     // Lineup: 1 QB, 2 RB, 2 WR, 1 TE, 1 FLEX, 1 DST, 1 K
     slots: { QB:1, RB:2, WR:2, TE:1, FLEX:1, DST:1, K:1 }
   },
-  players: [] // {name,pos,rank,posRank,tier,base,actual,myTeam}
+  players: [], // {name,pos,rank,posRank,tier,base,actual,myTeam}
+  log: []      // [{time, name, pos, actual}]
 };
 
 function save(){ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
@@ -281,13 +315,63 @@ function renderLineup(){
   paidCell.textContent = dollars(paid);
 }
 
+/* ---------- Recommended Players Available ---------- */
+function computeNeeds(){
+  const s = state.settings.slots;
+  const L = assignRoster(); // current filled based on drafted + myTeam
+  const needs = {
+    QB: Math.max(0, (s.QB||0) - L.QB.length),
+    RB: Math.max(0, (s.RB||0) - L.RB.length),
+    WR: Math.max(0, (s.WR||0) - L.WR.length),
+    TE: Math.max(0, (s.TE||0) - L.TE.length),
+    DST: Math.max(0, (s.DST||0) - L.DST.length),
+    K:  Math.max(0, (s.K||0)  - L.K.length),
+    FLEX: Math.max(0, (s.FLEX||0) - L.FLEX.length),
+  };
+  return needs;
+}
+function renderRecommendations(){
+  const body = document.getElementById("recsBody");
+  body.innerHTML = "";
+  const needs = computeNeeds();
+  const remaining = state.players.filter(p => Number(p.actual) === 0); // not drafted
+
+  // Order of priority: fill starters first, then FLEX
+  const order = ["QB","RB","WR","TE","DST","K","FLEX"];
+  const rows = [];
+  for (const pos of order){
+    const need = needs[pos] || 0;
+    if (need <= 0) continue;
+
+    let pool = [];
+    if (pos === "FLEX"){
+      pool = remaining.filter(p => p.pos==="RB"||p.pos==="WR"||p.pos==="TE");
+    } else {
+      pool = remaining.filter(p => p.pos === pos);
+    }
+    pool.sort((a,b)=> a.rank - b.rank);
+
+    // Show up to 5 per position needed
+    const top = pool.slice(0, Math.max(5, need));
+    top.forEach(p=>{
+      rows.push(`<tr><td>${pos}</td><td>${p.name}</td><td class="right mono">${dollars(p.base)}</td><td class="right">${p.rank}</td></tr>`);
+    });
+  }
+
+  if (rows.length === 0){
+    body.innerHTML = `<tr><td colspan="4" class="muted">No immediate starting needs. Track value and bench depth.</td></tr>`;
+  } else {
+    body.innerHTML = rows.join("");
+  }
+}
+
 /* ---------- Positional Value Tracking ---------- */
 function buildBuckets(){
-  const maxPosRank = state.players.reduce((m,p)=> Math.max(m, Number(p.posRank)||0), 0);
+  // Always show through 41–50
   const buckets = [];
-  for (let start=1; start<=30; start+=5){ buckets.push([start, start+4]); }  // 1–5 ... 26–30
-  let s = 31;
-  while (s <= maxPosRank){ buckets.push([s, s+9]); s += 10; } // 31–40, 41–50, ...
+  for (let start=1; start<=30; start+=5){ buckets.push([start, start+4]); }   // 1–5 … 26–30
+  buckets.push([31,40]);
+  buckets.push([41,50]);
   return buckets;
 }
 function formatPositionalValue(pos){
@@ -326,6 +410,29 @@ function renderPositionalValueTracking(){
   });
 }
 
+/* ---------- Draft Log ---------- */
+function logDraftEvent(name, pos, actual){
+  const entry = { time: Date.now(), name, pos, actual: Number(actual)||0 };
+  state.log.push(entry);
+  state.log.sort((a,b)=> b.time - a.time);
+  save();
+  renderLog();
+}
+function renderLog(){
+  const ul = document.getElementById("draftLog");
+  ul.innerHTML = "";
+  if (!state.log.length){
+    ul.innerHTML = `<li class="muted">No picks yet.</li>`;
+    return;
+  }
+  state.log.forEach(item=>{
+    const li = document.createElement("li");
+    li.className = "log-item";
+    li.innerHTML = `<span class="who">${item.name} <span class="muted">(${item.pos})</span></span><span class="amt">${dollars(item.actual)}</span>`;
+    ul.appendChild(li);
+  });
+}
+
 /* ---------- Draft Board ---------- */
 function renderDraftBoard(){
   const body = document.getElementById("boardBody");
@@ -360,17 +467,34 @@ function renderDraftBoard(){
       body.appendChild(tr);
     });
 
+  // Wire row inputs
   body.querySelectorAll("input,select").forEach(el => el.addEventListener("change", onEdit));
   computeKPIs();
   renderLineup();
+  renderRecommendations();
   renderPositionalValueTracking();
 }
 function onEdit(e){
   const i = Number(e.target.dataset.i);
   const k = e.target.dataset.k;
-  if (k === "actual"){ state.players[i].actual = Number(e.target.value)||0; }
-  else if (k === "myTeam"){ state.players[i].myTeam = (e.target.value === "true"); }
-  save(); computeKPIs(); renderLineup(); renderPositionalValueTracking();
+  if (k === "actual"){
+    const prev = Number(state.players[i].actual)||0;
+    const v = Number(e.target.value)||0;
+    state.players[i].actual = v;
+    // Log event when transitioning from 0 -> >0, or update if price changed
+    if ((prev === 0 && v > 0) || (prev !== v && v > 0)){
+      const p = state.players[i];
+      logDraftEvent(p.name, p.pos, v);
+    }
+    // If changed to 0, leave log as historical
+  } else if (k === "myTeam"){
+    state.players[i].myTeam = (e.target.value === "true");
+  }
+  save();
+  computeKPIs();
+  renderLineup();
+  renderRecommendations();
+  renderPositionalValueTracking();
 }
 
 /* ---------- Import / Export ---------- */
@@ -410,7 +534,7 @@ document.getElementById("importFile").addEventListener("change", (evt)=>{
         const rows = rowsFromSheet(sheet);
         state.players = toPlayersFromRows(rows);
       }
-      save(); computeKPIs(); renderLineup(); renderPositionalValueTracking(); renderDraftBoard();
+      save(); computeKPIs(); renderLineup(); renderRecommendations(); renderPositionalValueTracking(); renderDraftBoard();
     } catch(err){
       alert("Import failed: " + err.message);
     } finally { evt.target.value = ""; }
@@ -433,7 +557,7 @@ document.getElementById("exportBtn").addEventListener("click", ()=>{
     state.settings.budgetPerTeam = Number(document.getElementById("budgetPerTeam").value)||200;
     state.settings.yourTeamName = document.getElementById("yourTeamName").value || "You";
     state.settings.benchSlots = Number(document.getElementById("benchSlots").value)||6;
-    save(); computeKPIs(); renderLineup();
+    save(); computeKPIs(); renderLineup(); renderRecommendations();
   });
 });
 document.getElementById("search").addEventListener("input", renderDraftBoard);
@@ -456,8 +580,10 @@ document.getElementById("clearFilters").addEventListener("click", () => {
   document.getElementById("benchSlots").value = state.settings.benchSlots;
   computeKPIs();
   renderLineup();
+  renderRecommendations();
   renderPositionalValueTracking();
   renderDraftBoard();
+  renderLog();
 })();
 </script>
 </body>
